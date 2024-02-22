@@ -1,0 +1,18 @@
+future
+numpy; python_version < '3.0'
+numpy==1.18.4; python_version >= '3.0'
+pygame
+matplotlib
+open3d
+Pillow
+carla==0.9.14
+shapely 
+
+# expert agents
+scipy
+wandb
+tqdm
+einops
+h5py
+hydra-core==1.1
+lmdb
