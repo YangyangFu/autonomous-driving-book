@@ -259,4 +259,35 @@ class PIDLateralController():
         self._k_d = K_D
         self._dt = dt
 
-        
+
+class PurePursuitLateralController():
+    """
+    PurePursuitLateralController implements lateral control using pure pursuit method.
+    """
+
+    def __init__(self, vehicle, wheel_base, max_steer=0.8):
+        self._vehicle = vehicle
+
+
+    def run_step(self):
+        """Execute one step of lateral control to steer the vehicle towards a certain waypoint."""
+        # Get the ego's location and forward vector
+
+        # Get the vector vehicle-target_wp
+
+        # Calculate the look ahead distance
+
+        # Calculate the steering angle
+
+        # Return the steering control in the range [-1, 1]
+
+        pass 
+    
+    def find_lookahead_point(self):
+        pass
+
+    def pure_pursuit_control(self):
+        pass
+
+    def change_parameters(self):
+        pass
