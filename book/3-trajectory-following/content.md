@@ -53,9 +53,9 @@ $$
 tan(\alpha + \theta_r) = \frac{y_{ref} - y_r}{x_{ref} - x_r}
 
 $$
-where $\theta_r$ is the current heading of the car.
+where $\theta_r$ is the current heading of the car, \alpha is the angle between the car heading vector and the lookahead vector.
 
-From bycycle model, the steering angle $\delta$ is:
+From a bycycle model, the steering angle $\delta$ is:
 
 $$
 \delta = arctan(\frac{L_w}{R})
@@ -84,6 +84,7 @@ if using vehicle frame,
 - localize the car with the new pose
 
 **Tuning**
+
 the look ahead distance L is a parameter in the algorithm.
 - A smaller L leads to more aggressive maneuvering to follow a closer arc, and closer arcs can work against the dynamic limits of the car
 - A larger L leads to smoother maneuvering, but the car may not follow the path as closely, thus, leading to higher tracking errors.
