@@ -40,7 +40,7 @@ class LocalPlanner(object):
     unless a given global plan has already been specified.
     """
 
-    def __init__(self, vehicle, opt_dict={}, map_inst=None):
+    def __init__(self, vehicle, opt_dict={}, map_inst=None, lateral_controller="PurePursuit"):
         """
         :param vehicle: actor to apply to local planner logic onto
         :param opt_dict: dictionary of arguments with different parameters:
@@ -66,6 +66,7 @@ class LocalPlanner(object):
         else:
             self._map = self._world.get_map()
 
+        self._lateral_controller = lateral_controller
         self._vehicle_controller = None
         self.target_waypoint = None
         self.target_road_option = None
@@ -78,7 +79,7 @@ class LocalPlanner(object):
         self._dt = 1.0 / 20.0
         self._target_speed = 20.0  # Km/h
         self._sampling_radius = 2.0
-        self._args_lateral_dict = {'K_P': 1.95, 'K_I': 0.05, 'K_D': 0.2, 'dt': self._dt}
+        
         self._args_longitudinal_dict = {'K_P': 1.0, 'K_I': 0.05, 'K_D': 0, 'dt': self._dt}
         self._max_throt = 0.75
         self._max_brake = 0.3
@@ -87,6 +88,23 @@ class LocalPlanner(object):
         self._base_min_distance = 3.0
         self._distance_ratio = 0.5
         self._follow_speed_limits = False
+
+        # default lateral controller as PID
+        self.control_config = {"longitudinal_controller": {"name": "PID", 
+                                                           "args": self._args_longitudinal_dict
+                                                           }
+                            }
+        if  self._lateral_controller == "PID":
+            args_lateral_dict = {'K_P': 1.95, 'K_I': 0.05, 'K_D': 0.2, 'dt': self._dt}
+            self.control_config["lateral_controller"] = {"name": "PID",
+                                                      "args": args_lateral_dict
+                                                     }
+        elif self._lateral_controller == "PurePursuit":
+            wheel_base = self._vehicle.bounding_box.extent.x
+            args_lateral_dict = {'wheel_base': wheel_base, 'lookahead_gain': 0.1}
+            self.control_config["lateral_controller"] = {"name": "PurePursuit",
+                                                      "args": args_lateral_dict
+                                                     }
 
         # Overload parameters
         if opt_dict:
@@ -125,8 +143,7 @@ class LocalPlanner(object):
     def _init_controller(self):
         """Controller initialization"""
         self._vehicle_controller = VehiclePIDController(self._vehicle,
-                                                        args_lateral=self._args_lateral_dict,
-                                                        args_longitudinal=self._args_longitudinal_dict,
+                                                        self.control_config,
                                                         offset=self._offset,
                                                         max_throttle=self._max_throt,
                                                         max_brake=self._max_brake,
@@ -263,7 +280,8 @@ class LocalPlanner(object):
             control.manual_gear_shift = False
         else:
             self.target_waypoint, self.target_road_option = self._waypoints_queue[0]
-            control = self._vehicle_controller.run_step(self._target_speed, self.target_waypoint)
+            #control = self._vehicle_controller.run_step(self._target_speed, self.target_waypoint)
+            control = self._vehicle_controller.run_step(self._target_speed, self._waypoints_queue)
 
         if debug:
             draw_waypoints(self._vehicle.get_world(), [self.target_waypoint], 1.0)

@@ -20,7 +20,7 @@ class VehiclePIDController():
     """
 
 
-    def __init__(self, vehicle, args_lateral, args_longitudinal, offset=0, max_throttle=0.75, max_brake=0.3,
+    def __init__(self, vehicle, config, offset=0, max_throttle=0.75, max_brake=0.3,
                  max_steering=0.8):
         """
         Constructor method.
@@ -48,10 +48,22 @@ class VehiclePIDController():
         self._vehicle = vehicle
         self._world = self._vehicle.get_world()
         self.past_steering = self._vehicle.get_control().steer
-        self._lon_controller = PIDLongitudinalController(self._vehicle, **args_longitudinal)
-        self._lat_controller = PIDLateralController(self._vehicle, offset, **args_lateral)
 
-    def run_step(self, target_speed, waypoint):
+        # longitudinal controller
+        if config['longitudinal_controller']['name'] == 'PID':
+            self._lon_controller = PIDLongitudinalController(self._vehicle, **config['longitudinal_controller']['args'])
+        else:
+            raise ValueError("Longitudinal controller not recognized: {}".format(config['longitudinal_controller']['name']))
+        
+        # lateral controller
+        if config['lateral_controller']['name'] == 'PID':
+            self._lat_controller = PIDLateralController(self._vehicle, offset, **config['lateral_controller']['args'])
+        elif config['lateral_controller']['name'] == 'PurePursuit':
+            self._lat_controller = PurePursuitLateralController(self._vehicle, **config['lateral_controller']['args'])
+        else:
+            raise ValueError("Lateral controller not recognized: {}".format(config['lateral_controller']['name']))
+
+    def run_step(self, target_speed, waypoints):
         """
         Execute one step of control invoking both lateral and longitudinal
         PID controllers to reach a target waypoint
@@ -63,7 +75,7 @@ class VehiclePIDController():
         """
 
         acceleration = self._lon_controller.run_step(target_speed)
-        current_steering = self._lat_controller.run_step(waypoint)
+        current_steering = self._lat_controller.run_step(waypoints)
         control = carla.VehicleControl()
         if acceleration >= 0.0:
             control.throttle = min(acceleration, self.max_throt)
@@ -83,7 +95,7 @@ class VehiclePIDController():
             steering = min(self.max_steer, current_steering)
         else:
             steering = max(-self.max_steer, current_steering)
-
+        
         control.steer = steering
         control.hand_brake = False
         control.manual_gear_shift = False
@@ -189,17 +201,17 @@ class PIDLateralController():
         self._offset = offset
         self._e_buffer = deque(maxlen=10)
 
-    def run_step(self, waypoint):
+    def run_step(self, waypoints):
         """
         Execute one step of lateral control to steer
         the vehicle towards a certain waypoin.
 
-            :param waypoint: target waypoint
+            :param waypoints: a list of waypoints
             :return: steering control in the range [-1, 1] where:
             -1 maximum steering to left
             +1 maximum steering to right
         """
-        return self._pid_control(waypoint, self._vehicle.get_transform())
+        return self._pid_control(waypoints[0][0], self._vehicle.get_transform())
 
     def _pid_control(self, waypoint, vehicle_transform):
         """
@@ -265,29 +277,97 @@ class PurePursuitLateralController():
     PurePursuitLateralController implements lateral control using pure pursuit method.
     """
 
-    def __init__(self, vehicle, wheel_base, max_steer=0.8):
+    def __init__(self, vehicle, wheel_base, lookahead_gain=0.1):
         self._vehicle = vehicle
+        self._wheel_base = wheel_base
+        self._lookahead_gain = lookahead_gain
 
+        # for debugging purpose
+        self._e_buffer = deque(maxlen=10)
 
-    def run_step(self):
+    def run_step(self, waypoints):
         """Execute one step of lateral control to steer the vehicle towards a certain waypoint."""
-        # Get the ego's location and forward vector
-
-        # Get the vector vehicle-target_wp
 
         # Calculate the look ahead distance
+        lookahead_distance = self.get_lookahead_distance()
+        lookahead_point, _ = self.find_lookahead_point(self._vehicle.get_location(), waypoints, lookahead_distance)
 
         # Calculate the steering angle
+        steering = self.pure_pursuit_control(lookahead_point, lookahead_distance)
 
-        # Return the steering control in the range [-1, 1]
 
-        pass 
+        return steering 
     
-    def find_lookahead_point(self):
-        pass
+    def get_lookahead_distance(self):
+        velocity = self._vehicle.get_velocity()
+        speed = np.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
 
-    def pure_pursuit_control(self):
-        pass
+        lookahead_distance = max(2, self._lookahead_gain * speed)
+
+        return lookahead_distance
+
+    def find_lookahead_point(self, vehicle_location, waypoints, lookahead_distance):
+        """
+        Find the point on the path that is closest to the vehicle and further than the current position
+        """
+        closest_len = 10000
+        lookahead_point = waypoints[0]
+        for i in range(len(waypoints)):
+            waypoint, _ = waypoints[i]
+            distance = np.linalg.norm([waypoint.transform.location.x - vehicle_location.x, 
+                                       waypoint.transform.location.y - vehicle_location.y])
+            if distance < closest_len:
+                closest_len = distance
+                if distance > lookahead_distance:
+                    lookahead_point = waypoint
+                    break
+        return lookahead_point, i
+        
+
+    def pure_pursuit_control(self, lookahead_point, lookahead_distance):
+        alpha = math.atan2(lookahead_point.transform.location.y - self._vehicle.get_location().y, 
+                           lookahead_point.transform.location.x - self._vehicle.get_location().x) \
+                            - self._vehicle.get_transform().rotation.yaw * np.pi / 180.0
+        
+        delta = math.atan2(2.0 * self._wheel_base * math.sin(alpha) / lookahead_distance, 1.0)
+
+        # save steering error for debug
+        error = self.calculate_steering_error(lookahead_point, self._vehicle.get_transform())
+        self._e_buffer.append(error)
+
+        return np.clip(delta, -1.0, 1.0)
+    
+
+    def calculate_steering_error(self, waypoint, vehicle_transform):
+        """
+        Calculate the steering error of the vehicle based on the current waypoint
+        """
+        # Get the ego's location and forward vector
+        ego_loc = vehicle_transform.location
+        v_vec = vehicle_transform.get_forward_vector()
+        v_vec = np.array([v_vec.x, v_vec.y, 0.0])
+
+        # Get the vector vehicle-target_wp
+        w_loc = waypoint.transform.location
+        w_vec = np.array([w_loc.x - ego_loc.x,
+                          w_loc.y - ego_loc.y,
+                          0.0])
+
+        wv_linalg = np.linalg.norm(w_vec) * np.linalg.norm(v_vec)
+        if wv_linalg == 0:
+            _dot = 1
+        else:
+            _dot = math.acos(np.clip(np.dot(w_vec, v_vec) / (wv_linalg), -1.0, 1.0))
+        # check the direction of angle between v_vec and w_vec
+        # if positive, then steering is to the left of the waypoint
+        # based on the right hand rule, if the v_vec is pointing to the right of the w_vec, 
+        # then the angle from v_vec to w_vec is (0, pi), else (pi, 2*pi)
+        _cross = np.cross(v_vec, w_vec)
+        # if more than pi, then reverse action is needed.
+        if _cross[2] < 0:
+            _dot *= -1.0
+
+        return _dot
 
     def change_parameters(self):
         pass
