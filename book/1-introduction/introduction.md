@@ -16,6 +16,9 @@
 
 ### 1.3.4 Sensor
 
+### 1.3.5 Vehicle Control
+
+steer: -1.0 to 1.0, negative is left, positive is right
 
 ## 1.4 CARLA-based Virtual Testbed
 
