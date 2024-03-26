@@ -18,55 +18,67 @@ The map is assumed to be perfectly known, and the trajectory can then be generat
 
 Trajectory following is the process of making a vehicle follow a predefined trajectory. This is achieved by implementing a controller that computes the steering, throttle, and brake commands to make the vehicle follow the trajectory. The controller can be a simple PID controller or a more complex model predictive controller (MPC).
 
-### 3.2.1 Pure Pursuit Controller
+### 3.2.1 Basics
 
-**Local Frame**
+#### 3.2.1.1 Lateral Control Errors
 
-This is the pure pursuit algorithm. It is a path tracking algorithm that is used to follow a path. The algorithm calculates the steering angle of the vehicle based on the current position of the vehicle and the path to be followed.
+
+#### 3.2.1.2 Ackermann Steering Model
+
+How to steer vehicle if we know the curvature of the road?
+
+- if the road is straight, the steering angle is 0
+- if the road is curved with a constant curvature `k`, we can use the Ackermann steering model to calculate the steering angle $\delta$ of the vehicle.
 
 $$
-R = \frac{L^2}{2 \cdot y_{ref}}
+\delta = arctan(kL)
 $$
 
-Steering angle should be proportional to the curvature of the path.
+where `L` is the distance between the front and rear axles of the vehicle. This model assumes that the vehicle is a bicycle model, where the front wheels are steered and the rear wheels are fixed. The desired point is at the center of the rear wheels.
 
-$$
-\alpha = \frac{1}{R} = \frac{2 \cdot |y_{ref}|}{L^2}
-$$
+
+### 3.2.2 Pure Pursuit Controller
+
+Pure pursuit is a tracking algorithm that works by calculating the curvature that will move a vehicle from its current position to a goal position. The goal position is a point on the path that is a lookahead distance away from the vehicle. The curvature is then used to calculate the steering angle of the vehicle.
+
+Since the vehicle has already deviated from the path, the controller has to guide the vehicle back to the path through a new `path` or arc. The controller calculates the steering angle based on the curvature of the arc and the lookahead distance.
 
 
 **Inertia Frame**
 
-Pure pursuit algorithm in the inertial frame is shown as below.
+Assuming the desired point is the center of rear wheels, Pure pursuit algorithm in the inertial frame is shown as below.
 
 $$
-R = \frac{L}{2 \cdot sin(\alpha)}
+R = \frac{L_d}{2sin(\alpha)}
 $$
 
-Given a current speed $v_r$, the commanding heading rate is:
+Thus, the curvature of the arc is:
 
 $$
-\omega = \frac{v_r}{R} = \frac{2 v_r sin(\alpha)}{L}
+k = \frac{1}{R} = \frac{2 sin(\alpha)}{L_d}
 $$
 
-$$
-tan(\alpha + \theta_r) = \frac{y_{ref} - y_r}{x_{ref} - x_r}
+To follow the arc, using Ackman steer model, the steering angle $\delta$ is:
 
 $$
-where $\theta_r$ is the current heading of the car, \alpha is the angle between the car heading vector and the lookahead vector.
-
-From a bycycle model, the steering angle $\delta$ is:
-
-$$
-\delta = arctan(\frac{L_w}{R})
+\delta = arctan(kL)
 $$
 
-where $L_w$ is the distance between the front and rear axles of the car.
+where $L$ is the distance between the front and rear axles of the car.
 Combining the above two equations, we get:
 
 $$
-\delta = arctan(\frac{L_w}{R}) = arctan(\frac{2L_wsin(\alpha)}{L})
+\delta = arctan(\frac{2Lsin(\alpha)}{L_d})
 $$
+
+
+The angle between the vehicle heading and the path $\alpha$ can be calculated as:
+
+$$
+\alpha = arctan(\frac{y_r - y}{x_r - x})
+$$
+
+where $(x_r, y_r)$ is the goal point coordinates, and $(x, y)$ is the current pose of the vehicle rear wheels.
 
 
 QUESTIONS:
@@ -85,20 +97,45 @@ if using vehicle frame,
 
 **Tuning**
 
-the look ahead distance L is a parameter in the algorithm.
-- A smaller L leads to more aggressive maneuvering to follow a closer arc, and closer arcs can work against the dynamic limits of the car
-- A larger L leads to smoother maneuvering, but the car may not follow the path as closely, thus, leading to higher tracking errors.
+the look ahead distance $L_d$ is a parameter in the algorithm.
+- A smaller $L_d$ leads to more aggressive maneuvering to follow a closer arc, and closer arcs can work against the dynamic limits of the car
+- A larger $L_d$ leads to smoother maneuvering, but the car may not follow the path as closely, thus, leading to higher tracking errors.
 
 
 The lookahead distance is usually chosen to be a function of the speed of the vehicle, so that $\omega$ will not become more sensitive to $\alpha$ when $v_r$ is higher. The higher the speed, the higher the lookahead distance. This is because at higher speeds, the vehicle will cover more distance in the time it takes to react to the path. Thus, the lookahead distance should be higher to ensure that the vehicle has enough time to react to the path.
 
-#### 3.2.1.1 Pure Pursuit Controller Tuning
+**Notes**
 
-Tune lookahead distance for different speeds.
+If crosstrack error (e) is defined here as lateral distance between the heading vector and the goal point, then
+
+$$
+sin \alpha = \frac{e}{L_d}
+$$
+
+Thus, the steering angle is:
+
+$$
+\delta = arctan(\frac{2Lsin(\alpha)}{L_d}) = arctan(\frac{2Le}{L_d^2})
+$$
+
+- Pure pursuit is a porportional controller.
+- The proportional gain $\frac{2L}{L_d^2}$ can be tuned at different speeds by creating a relationship between the speed and the lookahead distance. 
+
+$$
+L_d = k_v v_r
+$$
+
+$$
+\delta = arctan(\frac{2Lsin \alpha}{k_vv_r})
+$$
+
+#### 3.2.3 Stanley Controller
+
+The Stanley controller is a tracking algorithm that works by calculating the cross-track error (CTE) and the heading error of the vehicle. The controller then computes the steering angle of the vehicle to minimize the CTE and heading error.
 
 
 
-### 3.2.1 PID Controller
+### 3.2.4 PID Controller
 
 **Longitudinal Control**: this controller is used to control the speed of the vehicle. It computes the throttle and brake commands to make the vehicle follow the desired speed. The throttle is within [-1, 1], where -1 is full brake and 1 is full throttle.
 
