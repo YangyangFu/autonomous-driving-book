@@ -23,19 +23,6 @@ Trajectory following is the process of making a vehicle follow a predefined traj
 #### 3.2.1.1 Lateral Control Errors
 
 
-#### 3.2.1.2 Ackermann Steering Model
-
-How to steer vehicle if we know the curvature of the road?
-
-- if the road is straight, the steering angle is 0
-- if the road is curved with a constant curvature `k`, we can use the Ackermann steering model to calculate the steering angle $\delta$ of the vehicle.
-
-$$
-\delta = arctan(kL)
-$$
-
-where `L` is the distance between the front and rear axles of the vehicle. This model assumes that the vehicle is a bicycle model, where the front wheels are steered and the rear wheels are fixed. The desired point is at the center of the rear wheels.
-
 
 ### 3.2.2 Pure Pursuit Controller
 
@@ -58,7 +45,7 @@ $$
 k = \frac{1}{R} = \frac{2 sin(\alpha)}{L_d}
 $$
 
-To follow the arc, using Ackman steer model, the steering angle $\delta$ is:
+To follow the arc, using kinematic bicyle model, the steering angle $\delta$ is:
 
 $$
 \delta = arctan(kL)
@@ -75,11 +62,10 @@ $$
 The angle between the vehicle heading and the path $\alpha$ can be calculated as:
 
 $$
-\alpha = arctan(\frac{y_r - y}{x_r - x})
+\alpha + \theta = arctan(\frac{y_g - y_r}{x_g - x_r})
 $$
 
-where $(x_r, y_r)$ is the goal point coordinates, and $(x, y)$ is the current pose of the vehicle rear wheels.
-
+where $(x_g, y_g)$ is the goal point coordinates, and $(x_r, y_r)$ is the current pose of the vehicle rear wheels, $\theta$ is the yaw angle or heading angle of the vehicle.
 
 QUESTIONS:
 
