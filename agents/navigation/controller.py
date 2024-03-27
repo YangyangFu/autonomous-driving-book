@@ -340,6 +340,7 @@ class PurePursuitLateralController():
 
     def calculate_steering_error(self, waypoint, vehicle_transform):
         """
+        TODO: this looks sketchy, need to be checked
         Calculate the steering error of the vehicle based on the current waypoint
         """
         # Get the ego's location and forward vector
@@ -371,3 +372,100 @@ class PurePursuitLateralController():
 
     def change_parameters(self):
         pass
+
+
+class StanleyLateralController():
+    """
+    StanleyLateralController implements lateral control using Stanley method.
+    
+    """
+    def __init__(self, vehicle, wheel_base, k=0.1, soft_gain=1.0):
+        """ Constructor method 
+        
+        :param vehicle: actor to apply to local planner logic onto
+        :param wheel_base: distance between front and rear wheels
+        :param k: gain for the control policy
+        :param soft_gain: gain for the softening of the control policy
+
+        :return: None
+        """
+        self._vehicle = vehicle
+        self._wheel_base = wheel_base
+
+        self.k = k
+        self.ks = soft_gain
+
+    def run_step(self, waypoints):
+
+        # find goal point 
+        goal_point = self.find_goal_point(waypoints)
+        
+        # calculate heading error
+        heading_error = self.heading_error(goal_point)
+
+        # calculate cross track error
+        cte = self.cross_track_error(goal_point)
+
+        # calculate steering angle 
+        steering = self.control_policy(heading_error, cte)
+
+        return steering  
+    
+    def normalize_angle(self, angle):
+        """ Normalize the angle between -pi and pi 
+        
+        :param angle: angle to normalize
+        :return: normalized angle
+        """
+        return (angle + np.pi) % (2 * np.pi) - np.pi
+
+    def find_goal_point(self, waypoints):
+        
+        # find the closest waypoint to the vehicle
+        next_wp = waypoints[0]
+
+        return next_wp
+
+
+    def heading_error(self, goal_point) -> float:
+        
+        theta_e = goal_point.transform.rotation.yaw - self._vehicle.get_transform().rotation.yaw
+
+        return self.normalize_angle(theta_e)
+
+    def cross_track_error(self, goal_point) -> float:
+         
+        # vehicle transform and location
+        ego_loc = self._vehicle.get_location()
+        ego_yaw = self._vehicle.get_transform().rotation.yaw
+        v_vec = self._vehicle.get_transform().get_forward_vector()
+        v_vec = np.array([v_vec.x, v_vec.y, 0.0])
+
+        # front axle location
+        xf = ego_loc.x + self._wheel_base * np.cos(np.radians(ego_yaw))
+        yf = ego_loc.y + self._wheel_base * np.sin(np.radians(ego_yaw))
+
+        # goal point location
+        xg = goal_point.transform.location.x
+        yg = goal_point.transform.location.y
+
+        # cross-track error vector
+        e = np.array([xg - xf, yg - yf, 0.0])
+
+        # cross-track error
+        cross = np.cross(v_vec, e)
+        de = np.linalg.norm(e)
+        if cross[2] > 0:
+            de = -de
+        
+        return de
+            
+    def control_policy(self, heading_error, cross_track_error) -> float:
+        """ Stanley control policy 
+        
+        :return: steering angle
+        """ 
+        speed = get_speed(self._vehicle)
+        steering = -heading_error + np.arctan2(self.k * cross_track_error, self.ks + speed)
+
+        return steering
