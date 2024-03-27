@@ -22,7 +22,38 @@ Trajectory following is the process of making a vehicle follow a predefined traj
 
 #### 3.2.1.1 Lateral Control Errors
 
+![lateral-control-errors](./figs/lateral-error.svg)
 
+The lateral control error is the distance between the vehicle's position and the desired path. There are two types of lateral control errors:
+- heading error $\theta_e$: the angle between the vehicle's heading and the desired path.
+- cross-track error $d_e$: the distance between the vehicle's position and the desired path.
+
+
+**Heading Error**
+$$
+\theta_e = \theta_g - \theta
+$$
+
+where $\theta_g$ is the desired heading angle (heading angle of the target point) and $\theta$ is the current heading angle of the vehicle. 
+
+**Cross-Track Error**
+The sign of the cross-track error is defined as follows to unify the control policy calculation:
+- if the vehicle is on the left side of the path, the error is positive
+- if the vehicle is on the right side of the path, the error is negative
+  
+$$
+e = \sqrt {(x_g - x_f)^2 + (y_g - y_f)^2} \\
+
+d_e = \begin{cases}
+e, & \text{if } \text{vehicle on the left} \\
+-e, & \text{if } \text{vehicle on the right}
+\end{cases} \\
+\dot d_e = -v_fsin(\delta+\theta_e)
+$$
+where $e$ is the magnititude of the cross-track error, $d_e$ is cross-track error with signs, $v_f$ is the forward velocity of the vehicle, $\delta$ is the steering angle, and $\theta_e$ is the heading error. 
+The negative sign before $v_f$ is due to the error design:
+- when the vehicle is on the left, the error is positive, and the error should decrease faster (towards 0) if the velocity is greater, which means the error change rate should be negative.
+- when the vehicle is on the right, the error is negative, and the error should increase faster (towards 0) if the velocity is greater, which means the error change rate should be positive.
 
 ### 3.2.2 Pure Pursuit Controller
 
@@ -118,6 +149,33 @@ $$
 #### 3.2.3 Stanley Controller
 
 The Stanley controller is a tracking algorithm that works by calculating the cross-track error (CTE) and the heading error of the vehicle. The controller then computes the steering angle of the vehicle to minimize the CTE and heading error.
+
+**Derivation**
+
+From the cross-track error definition in Section 3.2.1, we have:
+
+$$
+\dot d_e = -v_fsin(\delta+\theta_e)
+$$
+
+To design a expontial converging controller, we have:
+$$
+\dot d_e = -k d_e
+$$
+This gives:
+- if the vehicle is on the left side of the path, the error is positive, and will expontially decay to 0
+- if the vehicle is on the right side of the path, the error is negative, and will expontially converge to 0
+
+Combining the above two equations, we have:
+$$
+-v_fsin(\delta+\theta_e) = -k d_e
+$$
+
+Thus, the steering angle is:
+$$
+\delta = arctan(\frac{k d_e}{v_f}) - \theta_e
+$$
+
 
 
 
