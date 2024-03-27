@@ -179,11 +179,17 @@ $$
 -v_fsin(\delta+\theta_e) = -k d_e
 $$
 
-Thus, the steering angle is:
+Therefore, 
+$$
+\delta = arcsin(\frac{k d_e}{v_f}) - \theta_e
+$$
+
+Because $sin()$ is bound to $[-1, 1]$, to aovid easy saturation, the steering angle can be rewritten as:
 $$
 \delta = arctan(\frac{k d_e}{v_f}) - \theta_e
 $$
 
+For small steering, the above can still maintain a local exponential convergence.
 
 ### 3.2.4 PID Controller
 
