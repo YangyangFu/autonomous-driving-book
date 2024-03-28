@@ -32,6 +32,7 @@ The lateral control error is the distance between the vehicle's position and the
 
 
 **Heading Error**
+
 $$
 \theta_e = \theta_g - \theta
 $$
@@ -45,13 +46,13 @@ The sign of the cross-track error is defined as follows to unify the control pol
   
 $$
 e = (x_g - x_f, y_g - y_f) \\
-
 d_e = \begin{cases}
 ||e||, & \text{if } \text{vehicle on the left} \\
 -||e||, & \text{if } \text{vehicle on the right}
 \end{cases} \\
 \dot d_e = -v_fsin(\delta+\theta_e)
 $$
+
 where $e$ is vector from vehicle position to goal point, $d_e$ is cross-track error, $v_f$ is the forward velocity of the vehicle, $\delta$ is the steering angle, and $\theta_e$ is the heading error. 
 The negative sign before $v_f$ is due to the error design:
 - when the vehicle is on the left, the error is positive, and the error should decrease faster (towards 0) if the velocity is greater, which means the error change rate should be negative.
@@ -193,11 +194,13 @@ When the vehicle is at the left side of the path as shown in the above figure, w
 
 
 The change rate of cross-track error can be shown as:
+
 $$
 \dot d_e = v_fsin(\delta+\theta_e)
 $$
 
 To design a expontial converging controller, we have:
+
 $$
 \dot d_e = -k d_e
 $$
@@ -247,16 +250,19 @@ When vehicle is on the left side of a path as shown in the above figure, we have
 - $d_e > 0$
 
 The change rate of cross-track error can be shown as:
+
 $$
 \dot d_e = v_fsin(\theta_e - \delta)
 $$
 
 To design a expontial converging controller, we have:
+
 $$
 \dot d_e = -k d_e
 $$
 
 After rearranging, we have:
+
 $$
 \delta = arcsin(\frac{k d_e}{v_f}) + \theta_e
 $$
