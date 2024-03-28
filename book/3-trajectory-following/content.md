@@ -44,14 +44,18 @@ The sign of the cross-track error is defined as follows to unify the control pol
 - if the vehicle is on the left side of the path, the error is positive
 - if the vehicle is on the right side of the path, the error is negative
   
+
+$$e = (x_g - x_f, y_g - y_f)$$ 
+
 $$
-e = (x_g - x_f, y_g - y_f) \\
 d_e = \begin{cases}
   ||e||, & \text{if } \text{vehicle on the left} \\
   -||e||, & \text{if } \text{vehicle on the right}
-  \end{cases} \\
-\dot d_e = -v_fsin(\delta+\theta_e)
+  \end{cases}
 $$
+
+$$\dot d_e = -v_fsin(\delta+\theta_e)$$
+
 
 where $e$ is vector from vehicle position to goal point, $d_e$ is cross-track error, $v_f$ is the forward velocity of the vehicle, $\delta$ is the steering angle, and $\theta_e$ is the heading error. 
 The negative sign before $v_f$ is due to the error design:
@@ -235,6 +239,7 @@ We can reach the same steer control policy using the above equations.
 
 
 **METHOD 2**
+
 The Stanley paper uses the following definitions to derive the control policy:
 - $\delta$ is the steer angle, and $\delta = \theta - \theta_f$. 
     - negative for steering left 
