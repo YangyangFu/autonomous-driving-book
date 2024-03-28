@@ -47,9 +47,9 @@ The sign of the cross-track error is defined as follows to unify the control pol
 $$
 e = (x_g - x_f, y_g - y_f) \\
 d_e = \begin{cases}
-||e||, & \text{if } \text{vehicle on the left} \\
--||e||, & \text{if } \text{vehicle on the right}
-\end{cases} \\
+  ||e||, & \text{if } \text{vehicle on the left} \\
+  -||e||, & \text{if } \text{vehicle on the right}
+  \end{cases} \\
 \dot d_e = -v_fsin(\delta+\theta_e)
 $$
 
@@ -280,6 +280,7 @@ Therefore, the key here is the definition of steer angle.
 
 
 Because $sin()$ is bound to $[-1, 1]$, to aovid easy saturation, the steering angle can be rewritten as:
+
 $$
 \delta = arctan(\frac{k d_e}{v_f}) + \theta_e
 $$
@@ -287,9 +288,11 @@ $$
 For small steering, the above can still maintain a local exponential convergence. 
 
 To avoid oversensitivity to the cross-track error, the steering angle can be further modified as:
+
 $$
 \delta = arctan(\frac{k d_e}{k_v + v_f}) + \theta_e
 $$
+
 where $k_v$ is a soft gain to tune the sensitivity of the controller to the cross-track error. The stanley paper suggests $k_v = 1 m/s$.
 
 By adding the physical constraints of maximum steering angle, the steering angle can be further constrained to $[-\delta_{max}, \delta_{max}]$.
