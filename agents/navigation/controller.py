@@ -21,7 +21,7 @@ class VehiclePIDController():
 
 
     def __init__(self, vehicle, config, offset=0, max_throttle=0.75, max_brake=0.3,
-                 max_steering=0.8):
+                 max_steering=0.4):
         """
         Constructor method.
 
@@ -60,6 +60,8 @@ class VehiclePIDController():
             self._lat_controller = PIDLateralController(self._vehicle, offset, **config['lateral_controller']['args'])
         elif config['lateral_controller']['name'] == 'PurePursuit':
             self._lat_controller = PurePursuitLateralController(self._vehicle, **config['lateral_controller']['args'])
+        elif config['lateral_controller']['name'] == 'Stanley':
+            self._lat_controller = StanleyLateralController(self._vehicle, **config['lateral_controller']['args'])
         else:
             raise ValueError("Lateral controller not recognized: {}".format(config['lateral_controller']['name']))
 
@@ -85,7 +87,7 @@ class VehiclePIDController():
             control.brake = min(abs(acceleration), self.max_brake)
 
         # Steering regulation: changes cannot happen abruptly, can't steer too much.
-
+        
         if current_steering > self.past_steering + 0.1:
             current_steering = self.past_steering + 0.1
         elif current_steering < self.past_steering - 0.1:
@@ -379,7 +381,7 @@ class StanleyLateralController():
     StanleyLateralController implements lateral control using Stanley method.
     
     """
-    def __init__(self, vehicle, wheel_base, k=0.1, soft_gain=1.0):
+    def __init__(self, vehicle, wheel_base, k=2.0, soft_gain=1.0):
         """ Constructor method 
         
         :param vehicle: actor to apply to local planner logic onto
@@ -392,8 +394,12 @@ class StanleyLateralController():
         self._vehicle = vehicle
         self._wheel_base = wheel_base
 
+        # control policy parameters
         self.k = k
         self.ks = soft_gain
+
+        # for debugging purpose
+        self._e_buffer = deque(maxlen=10)
 
     def run_step(self, waypoints):
 
@@ -405,9 +411,17 @@ class StanleyLateralController():
 
         # calculate cross track error
         cte = self.cross_track_error(goal_point)
-
+        #cte = self.cross_error(goal_point, self._vehicle.get_transform())
+        
         # calculate steering angle 
-        steering = self.control_policy(heading_error, cte)
+        steering = -self.control_policy(heading_error, cte)
+
+        # save error for debugging
+        self._e_buffer.append(cte)
+        print("goal location: ", (goal_point[0].transform.location.x, goal_point[0].transform.location.y))
+        print("vehicle location: ", (self._vehicle.get_location().x, self._vehicle.get_location().y))
+        print("heading error, cte, steering command", heading_error, cte, steering)
+        print("====================================")
 
         return steering  
     
@@ -422,14 +436,24 @@ class StanleyLateralController():
     def find_goal_point(self, waypoints):
         
         # find the closest waypoint to the vehicle
-        next_wp = waypoints[0]
+        #next_wp = waypoints[0]
+
+        # find the cloest waypoint to the vehicle
+        min_distance = 10000
+        for i in range(len(waypoints)):
+            wp = waypoints[i]
+            distance = np.linalg.norm([wp[0].transform.location.x - self._vehicle.get_location().x, 
+                                       wp[0].transform.location.y - self._vehicle.get_location().y])
+            if distance < min_distance:
+                min_distance = distance
+                next_wp = wp
 
         return next_wp
 
 
     def heading_error(self, goal_point) -> float:
         
-        theta_e = goal_point.transform.rotation.yaw - self._vehicle.get_transform().rotation.yaw
+        theta_e = np.radians(self._vehicle.get_transform().rotation.yaw - goal_point[0].transform.rotation.yaw)
 
         return self.normalize_angle(theta_e)
 
@@ -442,23 +466,30 @@ class StanleyLateralController():
         v_vec = np.array([v_vec.x, v_vec.y, 0.0])
 
         # front axle location
-        xf = ego_loc.x + self._wheel_base * np.cos(np.radians(ego_yaw))
-        yf = ego_loc.y + self._wheel_base * np.sin(np.radians(ego_yaw))
+        xf = ego_loc.x #+ self._wheel_base / 2.0 * np.cos(np.radians(ego_yaw))
+        yf = ego_loc.y #+ self._wheel_base / 2.0 * np.sin(np.radians(ego_yaw))
 
         # goal point location
-        xg = goal_point.transform.location.x
-        yg = goal_point.transform.location.y
+        xg = goal_point[0].transform.location.x
+        yg = goal_point[0].transform.location.y
+        g_vec = goal_point[0].transform.get_forward_vector()
+        g_vec = np.array([g_vec.x, g_vec.y, 0.0])
+        gyaw = np.radians(goal_point[0].transform.rotation.yaw)
+        g2_vec = np.array([np.cos(gyaw), np.sin(gyaw), 0.0])
 
         # cross-track error vector
         e = np.array([xg - xf, yg - yf, 0.0])
 
-        # cross-track error
-        cross = np.cross(v_vec, e)
-        de = np.linalg.norm(e)
-        if cross[2] > 0:
-            de = -de
+        # cross-track error in Carla is left-handed
+        cross = np.cross(g_vec, e)
+        
+        # if on the left side of a path, de is positive
+        de = cross[2] 
+        print("g_vec: ", g_vec)
+        print("e_vec: ", e)
         
         return de
+    
             
     def control_policy(self, heading_error, cross_track_error) -> float:
         """ Stanley control policy 
@@ -466,6 +497,13 @@ class StanleyLateralController():
         :return: steering angle
         """ 
         speed = get_speed(self._vehicle)
-        steering = -heading_error + np.arctan2(self.k * cross_track_error, self.ks + speed)
+        steering = heading_error - np.arctan2(self.k * cross_track_error, self.ks + speed)
 
-        return steering
+        #steering = self.normalize_angle(steering)
+
+        # normalize to [-1, 1] based on max steering angle
+        max_steering = self._vehicle.get_physics_control().wheels[0].max_steer_angle
+        
+        steering = steering/np.radians(max_steering)
+        
+        return np.clip(steering, -1.0, 1.0)

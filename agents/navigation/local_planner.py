@@ -40,7 +40,7 @@ class LocalPlanner(object):
     unless a given global plan has already been specified.
     """
 
-    def __init__(self, vehicle, opt_dict={}, map_inst=None, lateral_controller="PurePursuit"):
+    def __init__(self, vehicle, opt_dict={}, map_inst=None, lateral_controller="Stanley"):
         """
         :param vehicle: actor to apply to local planner logic onto
         :param opt_dict: dictionary of arguments with different parameters:
@@ -105,7 +105,13 @@ class LocalPlanner(object):
             self.control_config["lateral_controller"] = {"name": "PurePursuit",
                                                       "args": args_lateral_dict
                                                      }
-
+        elif self._lateral_controller == "Stanley":
+            wheel_base = self._vehicle.bounding_box.extent.x
+            args_lateral_dict = {'wheel_base': wheel_base, 'k': 0.5, 'soft_gain': 0.0}
+            self.control_config["lateral_controller"] = {"name": "Stanley",
+                                                      "args": args_lateral_dict
+                                                     }
+        
         # Overload parameters
         if opt_dict:
             if 'dt' in opt_dict:
