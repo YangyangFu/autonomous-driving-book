@@ -107,7 +107,7 @@ class LocalPlanner(object):
                                                      }
         elif self._lateral_controller == "Stanley":
             wheel_base = self._vehicle.bounding_box.extent.x
-            args_lateral_dict = {'wheel_base': wheel_base, 'k': 0.5, 'soft_gain': 0.0}
+            args_lateral_dict = {'wheel_base': wheel_base, 'k': 5.0, 'soft_gain': 10.0}
             self.control_config["lateral_controller"] = {"name": "Stanley",
                                                       "args": args_lateral_dict
                                                      }

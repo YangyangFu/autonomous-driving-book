@@ -87,12 +87,12 @@ class VehiclePIDController():
             control.brake = min(abs(acceleration), self.max_brake)
 
         # Steering regulation: changes cannot happen abruptly, can't steer too much.
-        
+        """
         if current_steering > self.past_steering + 0.1:
             current_steering = self.past_steering + 0.1
         elif current_steering < self.past_steering - 0.1:
             current_steering = self.past_steering - 0.1
-
+        """
         if current_steering >= 0:
             steering = min(self.max_steer, current_steering)
         else:
@@ -414,14 +414,10 @@ class StanleyLateralController():
         #cte = self.cross_error(goal_point, self._vehicle.get_transform())
         
         # calculate steering angle 
-        steering = -self.control_policy(heading_error, cte)
+        steering = self.control_policy(heading_error, cte)
 
         # save error for debugging
         self._e_buffer.append(cte)
-        print("goal location: ", (goal_point[0].transform.location.x, goal_point[0].transform.location.y))
-        print("vehicle location: ", (self._vehicle.get_location().x, self._vehicle.get_location().y))
-        print("heading error, cte, steering command", heading_error, cte, steering)
-        print("====================================")
 
         return steering  
     
@@ -434,20 +430,10 @@ class StanleyLateralController():
         return (angle + np.pi) % (2 * np.pi) - np.pi
 
     def find_goal_point(self, waypoints):
-        
+        # TODO: it is better to interpolate the waypoints to get a smooth path
         # find the closest waypoint to the vehicle
-        #next_wp = waypoints[0]
-
-        # find the cloest waypoint to the vehicle
-        min_distance = 10000
-        for i in range(len(waypoints)):
-            wp = waypoints[i]
-            distance = np.linalg.norm([wp[0].transform.location.x - self._vehicle.get_location().x, 
-                                       wp[0].transform.location.y - self._vehicle.get_location().y])
-            if distance < min_distance:
-                min_distance = distance
-                next_wp = wp
-
+        next_wp = waypoints[0]
+        
         return next_wp
 
 
@@ -462,31 +448,28 @@ class StanleyLateralController():
         # vehicle transform and location
         ego_loc = self._vehicle.get_location()
         ego_yaw = self._vehicle.get_transform().rotation.yaw
-        v_vec = self._vehicle.get_transform().get_forward_vector()
-        v_vec = np.array([v_vec.x, v_vec.y, 0.0])
 
         # front axle location
-        xf = ego_loc.x #+ self._wheel_base / 2.0 * np.cos(np.radians(ego_yaw))
-        yf = ego_loc.y #+ self._wheel_base / 2.0 * np.sin(np.radians(ego_yaw))
+        xf = ego_loc.x + self._wheel_base / 2.0 * np.cos(np.radians(ego_yaw))
+        yf = ego_loc.y + self._wheel_base / 2.0 * np.sin(np.radians(ego_yaw))
 
         # goal point location
         xg = goal_point[0].transform.location.x
         yg = goal_point[0].transform.location.y
         g_vec = goal_point[0].transform.get_forward_vector()
         g_vec = np.array([g_vec.x, g_vec.y, 0.0])
-        gyaw = np.radians(goal_point[0].transform.rotation.yaw)
-        g2_vec = np.array([np.cos(gyaw), np.sin(gyaw), 0.0])
 
         # cross-track error vector
         e = np.array([xg - xf, yg - yf, 0.0])
 
-        # cross-track error in Carla is left-handed
+        # cross-track error 
         cross = np.cross(g_vec, e)
-        
-        # if on the left side of a path, de is positive
-        de = cross[2] 
-        print("g_vec: ", g_vec)
-        print("e_vec: ", e)
+        print("goal point: ", xg, yg, "vehicle: ", xf, yf)
+        print("g, e, cross: ", g_vec, e)
+        print("cross: ", cross[2])
+        print("====================================")
+        # if on the left side of a path, de is negative
+        de = cross[2]
         
         return de
     
@@ -497,9 +480,9 @@ class StanleyLateralController():
         :return: steering angle
         """ 
         speed = get_speed(self._vehicle)
-        steering = heading_error - np.arctan2(self.k * cross_track_error, self.ks + speed)
+        steering = -heading_error + np.arctan2(self.k * cross_track_error, self.ks + speed)
 
-        #steering = self.normalize_angle(steering)
+        steering = self.normalize_angle(steering)
 
         # normalize to [-1, 1] based on max steering angle
         max_steering = self._vehicle.get_physics_control().wheels[0].max_steer_angle

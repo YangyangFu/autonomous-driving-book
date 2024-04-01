@@ -951,7 +951,7 @@ def game_loop(args):
             vm.append(get_speed(world.player))
             vs.append(agent.get_local_planner()._target_speed)
             throttle.append(control.throttle - control.brake)
-            steer.append(control.steer)
+            steer.append(world.player.get_control().steer)
             steer_error.append(agent._local_planner._vehicle_controller._lat_controller._e_buffer[-1])
             lvm.set_data(range(len(vm)), vm)
             lvs.set_data(range(len(vs)), vs)
