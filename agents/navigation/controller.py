@@ -480,6 +480,7 @@ class StanleyLateralController():
         :return: steering angle
         """ 
         speed = get_speed(self._vehicle)
+        # NOTE: CARLA uses left-handed coordinate system. The yaw angle needs to be negated.
         steering = -heading_error + np.arctan2(self.k * cross_track_error, self.ks + speed)
 
         steering = self.normalize_angle(steering)
