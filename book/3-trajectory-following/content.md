@@ -303,6 +303,28 @@ where $k_v$ is a soft gain to tune the sensitivity of the controller to the cros
 By adding the physical constraints of maximum steering angle, the steering angle can be further constrained to $[-\delta_{max}, \delta_{max}]$.
 
 
+**Left-handed System**
+Note the above derivation is based on the right-handed coordinate system. If the left-handed coordinate system is used, the transition between the two systems can be done by:
+
+```text
+RHS = LHS
+```
+
+For position,
+```text
+x_RHS = x_LHS
+y_RHS = -y_LHS
+z_RHS = z_LHS
+```
+
+For rotation,
+```text
+roll_RHS = -roll_LHS
+pitch_RHS = pitch_LHS
+yaw_RHS = -yaw_LHS
+```
+
+
 ### 3.2.4 PID Controller
 
 **Longitudinal Control**: this controller is used to control the speed of the vehicle. It computes the throttle and brake commands to make the vehicle follow the desired speed. The throttle is within [-1, 1], where -1 is full brake and 1 is full throttle.
