@@ -87,12 +87,12 @@ class VehiclePIDController():
             control.brake = min(abs(acceleration), self.max_brake)
 
         # Steering regulation: changes cannot happen abruptly, can't steer too much.
-        """
+        
         if current_steering > self.past_steering + 0.1:
             current_steering = self.past_steering + 0.1
         elif current_steering < self.past_steering - 0.1:
             current_steering = self.past_steering - 0.1
-        """
+        
         if current_steering >= 0:
             steering = min(self.max_steer, current_steering)
         else:
@@ -329,7 +329,7 @@ class PurePursuitLateralController():
     def pure_pursuit_control(self, lookahead_point, lookahead_distance):
         alpha = math.atan2(lookahead_point.transform.location.y - self._vehicle.get_location().y, 
                            lookahead_point.transform.location.x - self._vehicle.get_location().x) \
-                            - self._vehicle.get_transform().rotation.yaw * np.pi / 180.0
+                            - np.radians(self._vehicle.get_transform().rotation.yaw)
         
         delta = math.atan2(2.0 * self._wheel_base * math.sin(alpha) / lookahead_distance, 1.0)
 
