@@ -164,7 +164,7 @@ class LQRLateralControl():
 
         # compute feedback gain matrix
         K = np.linalg.inv(R + Bd_T @ P @ Bd) @ (Bd_T @ P @ Ad + M_T)
-        
+
         return K
 
     def compute_curvature(self, prev_waypoint, ref_waypoint):
@@ -205,7 +205,8 @@ class LQRLateralControl():
         # solve LQR problem to get feedback gain
         Q = np.diag(self.q)
         R = np.diag(self.r)
-        K = self.solve_lqr(self.model.Ad, self.model.Bd, Q, R)
+        M = np.zeros((self.model.state_dim, self.model.control_dim))
+        K = self.solve_lqr(self.model.Ad, self.model.Bd, Q, R, M, tolerance=1e-6, max_iter=1000)
 
         # compute feedback control policy
         cur_state = self.extract_current_state(vehicle.get_transform(), ref_pose)
