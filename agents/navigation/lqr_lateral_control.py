@@ -7,7 +7,7 @@ class LQRLateralControl():
     LQR optimal control policy based on different vehicle model.
     """
 
-    def __init__(self, vehicle, model_name, model_params, dt=0.1):
+    def __init__(self, vehicle, model_name, model_params, max_steer, dt=0.1):
         
         self._vehicle = vehicle
 
@@ -15,13 +15,20 @@ class LQRLateralControl():
         self.model_name = model_name
         self._initiate_vehichle_model(model_name, model_params)
 
+        # vehicle parameters
+        self.max_steer = max_steer
+
         # LQR parameters
         self.dt = dt
         self.q = [1.0] * self.model.state_dim
         self.r = [1.0] * self.model.control_dim
 
+        # initialize previous state
         self._prev_e = 0.0
         self._prev_th = 0.0
+
+        # initialize previous waypoint to compute curvature
+        # if smooth trajectory is provided, this can be removed
         self._temp_waypoint = self._vehicle.get_world().get_map().get_waypoint(self._vehicle.get_location())
         self._prev_waypoint = None
 
@@ -41,10 +48,11 @@ class LQRLateralControl():
             self._temp_waypoint = goal_point
 
         # compute control command 
-        steer, x = self.compute_control_command(self._vehicle, goal_point)
+        steer, _ = self.compute_control_command(self._vehicle, goal_point)
 
         # bound steer to carla env 
-        
+        steer = np.clip(steer, -1.0, 1.0)
+
         return steer
     
     def extract_trajectory(self):
@@ -101,12 +109,62 @@ class LQRLateralControl():
 
         return lat_error
 
-    def solve_lqr(self, Ad, Bd, Q, R, tolerance=1e-6, max_iter=1000):
+    def solve_lqr(self, Ad, Bd, Q, R, M, tolerance=1e-6, max_iter=1000):
         """
         Solve the discrete-time LQR controller by iterating to a fixed point.
+        
+        min (x'Qx + u'Ru + 2x'Mu)
+
+        :param Ad: discrete-time system matrix
+        :param Bd: discrete-time control matrix
+        :param Q: cost function matrix
+        :param R: control effort matrix
+        :param M: cross-term matrix
+        :param tolerance: convergence criteria for discrete-time Algebraic Riccati Equation
+        :param max_iter: maximum number of iterations
+
+        :return: K: feedback gain matrix
 
         """
+        # check validity of the input matrices
+        if (Ad.shape[0] != Ad.shape[1]) or \
+            (Bd.shape[0] != Ad.shape[0]) or \
+            (Q.shape[0] != Q.shape[1]) or \
+            (Q.shape[0] != Ad.shape[0]) or \
+            (R.shape[0] != R.shape[1]) or \
+            (R.shape[0] != Bd.shape[1]) or \
+            (M.shape[0] != Q.shape[0]) or \
+            (M.shape[1] != R.shape[1]):
+            raise ValueError("Input matrices are not in the correct shape.")
 
+        Ad_T = Ad.T
+        Bd_T = Bd.T
+        M_T = M.T
+
+        # solve discrete-time Algebraic Riccati Equation
+        # calculate matrix difference Riccati equation, initialize P and Q
+        P = Q
+        num_iter = 0
+        diff = np.inf
+
+        while num_iter < max_iter and diff > tolerance:
+            P_next = Ad_T @ P @ Ad - (Ad_T @ P @ Bd + M) @ np.linalg.inv(R + Bd_T @ P @ Bd) @ (Bd_T @ P @ Ad + M_T) + Q
+            
+            # check convergence
+            diff = np.abs(P_next - P).max()
+            P = P_next
+            num_iter += 1
+        
+        # convergence check
+        if num_iter >= max_iter:
+            message = "LQR solver did not converge."
+        else:
+            message = "LQR solver converged in {} iterations with a tolerance of {}.".format(num_iter, tolerance)
+        print(message)
+
+        # compute feedback gain matrix
+        K = np.linalg.inv(R + Bd_T @ P @ Bd) @ (Bd_T @ P @ Ad + M_T)
+        
         return K
 
     def compute_curvature(self, prev_waypoint, ref_waypoint):
@@ -150,11 +208,13 @@ class LQRLateralControl():
         K = self.solve_lqr(self.model.Ad, self.model.Bd, Q, R)
 
         # compute feedback control policy
-        x = self.extract_current_state(vehicle.get_transform(), ref_pose)
-        u = -K @ x
+        cur_state = self.extract_current_state(vehicle.get_transform(), ref_pose)
+        u = -K @ cur_state
 
         steer = u[0, 0]
+        steer = self.normalize_angle(steer)
+        steer = steer / self.max_steer
 
         # compute feedforward control policy to decrease steady state error
 
-        return steer, x
+        return steer, cur_state
