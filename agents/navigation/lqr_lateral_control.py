@@ -3,7 +3,7 @@ from collections import deque
 
 from .vehicle_model import DynamicBicycleModel
 
-class LQRLateralControl():
+class LQRLateralController():
     """
     LQR optimal control policy based on different vehicle model.
     """
@@ -255,5 +255,5 @@ class LQRLateralControl():
         steer = self.normalize_angle(steer)
         steer = steer / self.max_steer
         steer = np.clip(steer, -1.0, 1.0)
-        
+
         return steer, cur_state
