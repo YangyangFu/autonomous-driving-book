@@ -8,6 +8,7 @@
 from enum import IntEnum
 from collections import deque
 import random
+import numpy as np
 
 import carla
 from agents.navigation.controller import VehiclePIDController
@@ -83,7 +84,7 @@ class LocalPlanner(object):
         self._args_longitudinal_dict = {'K_P': 1.0, 'K_I': 0.05, 'K_D': 0, 'dt': self._dt}
         self._max_throt = 0.75
         self._max_brake = 0.3
-        self._max_steer = 0.8
+        self._max_steer = np.radians(self._vehicle.get_physics_control().wheels[0].max_steer_angle)
         self._offset = 0
         self._base_min_distance = 3.0
         self._distance_ratio = 0.5
@@ -117,9 +118,6 @@ class LocalPlanner(object):
             mass = self._vehicle.get_physics_control().mass # kg
             moi = self._vehicle.get_physics_control().moi # NOTE: this seems not the correct moment of inertia kg*m^2
             
-            print(cg, l, mass, moi)
-            print(mass*9.8, mass*9.8*17)
-            print("=====================================")
             # approximate lr and lf
             lf = l*0.5 - cg.x
             lr = l*0.5 + cg.x
@@ -129,15 +127,14 @@ class LocalPlanner(object):
             wheels = self._vehicle.get_physics_control().wheels
             cf = (wheels[0].lat_stiff_value + wheels[1].lat_stiff_value) * fn 
             cr = (wheels[2].lat_stiff_value + wheels[3].lat_stiff_value) * fn
-            print(wheels[0].lat_stiff_value, wheels[1].lat_stiff_value, wheels[2].lat_stiff_value, wheels[3].lat_stiff_value)
-            
+
             model_params = {'lf': lf,
                             'lr': lr,
                             'mass': mass,
                             'cf': cf, 
                             'cr': cr}
             
-            args_lateral_dict = {'model_name': 'dynamic_bicycle', 'model_params': model_params, 'max_steer': 1.0, 'dt': self._dt}
+            args_lateral_dict = {'model_name': 'dynamic_bicycle', 'model_params': model_params, 'max_steer': self._max_steer, 'dt': self._dt}
             self.control_config["lateral_controller"] = {"name": "LQR",
                                                         "args": args_lateral_dict
                                                          }

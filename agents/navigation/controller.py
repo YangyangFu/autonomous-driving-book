@@ -95,15 +95,11 @@ class VehiclePIDController():
         elif current_steering < self.past_steering - 0.1:
             current_steering = self.past_steering - 0.1
         """
-        if current_steering >= 0:
-            steering = min(self.max_steer, current_steering)
-        else:
-            steering = max(-self.max_steer, current_steering)
         
-        control.steer = steering
+        control.steer = current_steering
         control.hand_brake = False
         control.manual_gear_shift = False
-        self.past_steering = steering
+        self.past_steering = current_steering
 
         return control
 

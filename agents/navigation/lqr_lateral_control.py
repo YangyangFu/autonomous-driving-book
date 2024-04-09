@@ -98,6 +98,7 @@ class LQRLateralControl():
     def update_discrete_matrix(self, velocity, curvature):
         
         # TODO: current velocity or desired velocity?
+        # Both should work: if vehicle is stopped due to traffic, current velocity would be zero. need gaurd for division by zero
         self.model.set_velocity(velocity)
         self.model.update_matrix()
 
@@ -253,5 +254,6 @@ class LQRLateralControl():
         # normalize
         steer = self.normalize_angle(steer)
         steer = steer / self.max_steer
-
+        steer = np.clip(steer, -1.0, 1.0)
+        
         return steer, cur_state
