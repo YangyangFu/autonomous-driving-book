@@ -28,30 +28,27 @@ class BasicModel:
 
 
 class DynamicBicycleModel(BasicModel):
-    def __init__(self, wheelbase, mass_fl, mass_fr, mass_rl, mass_rr, cf, cr):
+    def __init__(self, lf, lr, mass, cf, cr):
         super().__init__(name = "dynamic_bicycle", 
                          state_dim = 4, 
                          control_dim = 1, 
                          output_dim = 2, 
-                         wheelbase = wheelbase)
+                         wheelbase = lf + lr)
 
         # model specific parameters
-        self.mass_fl = mass_fl
-        self.mass_fr = mass_fr
-        self.mass_rl = mass_rl
-        self.mass_rr = mass_rr
+        self.lf = lf
+        self.lr = lr
+        self.mass = mass
         self.cf = cf
         self.cr = cr
 
         # computed parameters
-        self.mass_f = self.mass_fl + self.mass_fr
-        self.mass_r = self.mass_rl + self.mass_rr
-        self.mass = self.mass_f + self.mass_r
+        self.mass_f = lr / (lf + lr) * mass
+        self.mass_r = lf / (lf + lr) * mass
 
-        self.lf = self.wheelbase *(1 - self.mass_f / self.mass)
-        self.lr = self.wheelbase *(1 - self.mass_r / self.mass)
         self.iz = self.lf * self.lf * self.mass_f + self.lr * self.lr * self.mass_r
-
+        print("Inertia: ", self.iz) 
+        
     def update_matrix(self):
         """
         Update continuous state space matrix
@@ -117,12 +114,12 @@ class DynamicBicycleModel(BasicModel):
             Wd = A^-1*(Ad - I)*W
             Cd = C
         """
-        I = self.eye(self.state_dim)
-        Ainv = np.linalg.inv(I - dt * 0.5 * self.A)
-        self.Ad = Ainv  @ (I + dt * 0.5 * self.A) # bilinear discretization
-        self.Bd = (Ainv * dt) @ self.B
-        self.Wd = (Ainv * dt * self.curvature * self.velocity) @ self.W
-        self.Cd = self.C
+        I = np.eye(self.state_dim)
+        Ainv = np.linalg.inv(I - dt * 0.5 * self._A)
+        self.Ad = Ainv  @ (I + dt * 0.5 * self._A) # bilinear discretization
+        self.Bd = (Ainv * dt) @ self._B
+        self.Wd = (Ainv * dt * self.curvature * self.velocity) @ self._W
+        self.Cd = self._C
 
 
 

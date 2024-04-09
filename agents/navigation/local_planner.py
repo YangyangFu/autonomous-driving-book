@@ -40,7 +40,7 @@ class LocalPlanner(object):
     unless a given global plan has already been specified.
     """
 
-    def __init__(self, vehicle, opt_dict={}, map_inst=None, lateral_controller="Stanley"):
+    def __init__(self, vehicle, opt_dict={}, map_inst=None, lateral_controller="LQR"):
         """
         :param vehicle: actor to apply to local planner logic onto
         :param opt_dict: dictionary of arguments with different parameters:
@@ -100,17 +100,47 @@ class LocalPlanner(object):
                                                       "args": args_lateral_dict
                                                      }
         elif self._lateral_controller == "PurePursuit":
-            wheel_base = self._vehicle.bounding_box.extent.x
+            wheel_base = self._vehicle.bounding_box.extent.x * 2 # this is actually the length of the car not wheelbase
             args_lateral_dict = {'wheel_base': wheel_base, 'lookahead_gain': 0.1}
             self.control_config["lateral_controller"] = {"name": "PurePursuit",
                                                       "args": args_lateral_dict
                                                      }
         elif self._lateral_controller == "Stanley":
-            wheel_base = self._vehicle.bounding_box.extent.x
+            wheel_base = self._vehicle.bounding_box.extent.x * 2
             args_lateral_dict = {'wheel_base': wheel_base, 'k': 5.0, 'soft_gain': 10.0}
             self.control_config["lateral_controller"] = {"name": "Stanley",
                                                       "args": args_lateral_dict
                                                      }
+        elif self._lateral_controller == "LQR":
+            l = self._vehicle.bounding_box.extent.x * 2 # geometrical center
+            cg = self._vehicle.get_physics_control().center_of_mass # 3D meters
+            mass = self._vehicle.get_physics_control().mass # kg
+            moi = self._vehicle.get_physics_control().moi # NOTE: this seems not the correct moment of inertia kg*m^2
+            
+            print(cg, l, mass, moi)
+            print(mass*9.8, mass*9.8*17)
+            print("=====================================")
+            # approximate lr and lf
+            lf = l*0.5 - cg.x
+            lr = l*0.5 + cg.x
+
+            # This is just an estimation. The real value should be calibrated by using vehicle data
+            fn = mass * 9.8 # force on wheels when car is stationary
+            wheels = self._vehicle.get_physics_control().wheels
+            cf = (wheels[0].lat_stiff_value + wheels[1].lat_stiff_value) * fn 
+            cr = (wheels[2].lat_stiff_value + wheels[3].lat_stiff_value) * fn
+            print(wheels[0].lat_stiff_value, wheels[1].lat_stiff_value, wheels[2].lat_stiff_value, wheels[3].lat_stiff_value)
+            
+            model_params = {'lf': lf,
+                            'lr': lr,
+                            'mass': mass,
+                            'cf': cf, 
+                            'cr': cr}
+            
+            args_lateral_dict = {'model_name': 'dynamic_bicycle', 'model_params': model_params, 'max_steer': 1.0, 'dt': self._dt}
+            self.control_config["lateral_controller"] = {"name": "LQR",
+                                                        "args": args_lateral_dict
+                                                         }
         
         # Overload parameters
         if opt_dict:

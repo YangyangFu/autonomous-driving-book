@@ -10,7 +10,7 @@ import math
 import numpy as np
 import carla
 from agents.tools.misc import get_speed
-
+from agents.navigation.lqr_lateral_control import LQRLateralControl
 
 class VehiclePIDController():
     """
@@ -62,6 +62,8 @@ class VehiclePIDController():
             self._lat_controller = PurePursuitLateralController(self._vehicle, **config['lateral_controller']['args'])
         elif config['lateral_controller']['name'] == 'Stanley':
             self._lat_controller = StanleyLateralController(self._vehicle, **config['lateral_controller']['args'])
+        elif config['lateral_controller']['name'] == 'LQR':
+            self._lat_controller = LQRLateralControl(self._vehicle, **config['lateral_controller']['args'])
         else:
             raise ValueError("Lateral controller not recognized: {}".format(config['lateral_controller']['name']))
 
@@ -87,12 +89,12 @@ class VehiclePIDController():
             control.brake = min(abs(acceleration), self.max_brake)
 
         # Steering regulation: changes cannot happen abruptly, can't steer too much.
-        
+        """
         if current_steering > self.past_steering + 0.1:
             current_steering = self.past_steering + 0.1
         elif current_steering < self.past_steering - 0.1:
             current_steering = self.past_steering - 0.1
-        
+        """
         if current_steering >= 0:
             steering = min(self.max_steer, current_steering)
         else:
