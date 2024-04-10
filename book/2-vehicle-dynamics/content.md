@@ -145,5 +145,49 @@ r(s)
 $$
 
 
+## 2.3 Bilinear Discretization
+
+The continuous-time model can be discretized using the bilinear transformation method. Denote the continuous-time model as:
+
+$$
+\dot x = Ax + Bu + w \\
+y = Cx 
+$$
+
+Applying integration to the continuous-time model, we have:
+
+$$
+x(t+\Delta t) = x(t) + \int_t^{t+\Delta t} Ax(\tau) + Bu(\tau) d\tau + \int_t^{t+\Delta t} w(\tau) d\tau
+$$
+
+Assuming the input and disturbance are constant over the interval, we have:
+
+$$
+x(t+\Delta t) = x(t) + \int_t^{t+\Delta t}A x(\tau)d\tau + Bu\Delta t + w \Delta t
+$$
+
+The integral term can be approximated by the midpoint rule:
+
+$$
+\int_t^{t+\Delta t}A x(\tau)d\tau \approx A\frac{x(t)+x(t+\Delta t)}{2}\Delta t
+$$
+
+Substitute the above approximation into the discretized model, we have:
+
+$$
+x(t+\Delta t) = x(t) + \frac{A(x(t)+x(t+\Delta t))}{2}\Delta t + Bu\Delta t + w \Delta t
+$$ 
+
+Rearranging the terms, we have:
+
+$$
+x(t+\Delta t) = (I - \frac{A\Delta t}{2})^{-1}(I + \frac{A\Delta t}{2})x(t) + (I - \frac{A\Delta t}{2})^{-1}Bu\Delta t + (I - \frac{A\Delta t}{2})^{-1}w\Delta t \\
+
+y(t) = Cx(t)
+$$
+
+The above equation is the discretized model of the continuous-time model. The discretized model can be used for control design and simulation.
+
+
 
 
