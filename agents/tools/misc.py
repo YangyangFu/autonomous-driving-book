@@ -169,3 +169,11 @@ def positive(num):
         :param num: value to check
     """
     return num if num > 0.0 else 0.0
+
+def normalize_rad_angle(angle):
+    """
+    Normalize an angle in radians to the range [-pi, pi]
+
+        :param angle: input angle in radians
+    """
+    return (angle + np.pi) % (2 * np.pi) - np.pi
