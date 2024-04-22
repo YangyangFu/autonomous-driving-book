@@ -18,6 +18,7 @@ class CubicSpiral:
 
     """
     def __init__(self):
+        self.simpson_size = 9
 
         pass 
 
@@ -162,7 +163,38 @@ class CubicSpiral:
 
         return dth_dp
     
-    
+
+    def partial_xy_p(self, p0, p1, p2, p3, sg, s):
+
+        # s to intervals
+        ds = s / (self.simpson_size - 1) 
+
+        s_points = [i * ds for i in range(self.simpson_size)]
+        a = self.p_to_a(p0, p1, p2, p3, sg)
+
+        th_points = [self.theta(a, s) for s in s_points]
+        dth_dp_points = [self.partial_theta_p(p0, p1, p2, p3, sg, s) for s in s_points]
+
+        # for x
+        sin_th_points = [np.sin(th) for th in th_points]
+        sin_th_dth_dp = [sin_th * dth_dp for sin_th, dth_dp in zip(sin_th_points, dth_dp_points)]
+
+        # for y 
+        cos_th_points = [np.cos(th) for th in th_points]
+        cos_th_dth_dp = [cos_th * dth_dp for cos_th, dth_dp in zip(cos_th_points, dth_dp_points)]
+        
+        # simpson integration
+        dx_dp = -simpson(sin_th_dth_dp, s_points)
+        dy_dp = simpson(cos_th_dth_dp, s_points)
+
+        return dx_dp, dy_dp
+
+    def theta(self, a, s):
+        """
+        Theta function
+        """
+        return a[0] * s + a[1] / 2.0 * s**2 + a[2] / 3.0 * s**3 + a[3] / 4.0 * s**4
+
     def _estimate_waypoint_curvature(self, waypoint, distance = 0.2):
         """
         Estimate waypoint curvature based on HD map
