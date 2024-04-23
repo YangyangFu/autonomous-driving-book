@@ -1,7 +1,10 @@
+from typing import Tuple, List
 import numpy as np
 from scipy.integrate import simpson 
+import carla
 
 from agents.tools.misc import normalize_rad_angle
+from agents.navigation.trajectory import Trajectory, RoadPoint
 
 class CubicSpiral:
     """
@@ -19,10 +22,15 @@ class CubicSpiral:
     """
     def __init__(self):
         self.simpson_size = 9
+        self.p_params = np.zeros((4,1))
+        self.a_params = np.zeros((4,1))
+        self.s_g = -1.0
+        
+        # newton raphson parameters
+        self.tolerance = 1e-6
+        self.max_iter = 100
 
-        pass 
-
-    def generate_spiral(self, start, end):
+    def generate_spiral(self, start: carla.Transform, end: carla.Transform) -> Tuple[bool, np.array, float]:
         """
         Generate cubic spiral between start and end points
         """
@@ -31,6 +39,8 @@ class CubicSpiral:
         y_s = start.location.y
         th_s = normalize_rad_angle(np.radians(start.rotation.yaw)) 
         k_s = self._estimate_waypoint_curvature(start)
+
+        self.start = RoadPoint(x_s, y_s, th_s, k_s)
 
         # ending point
         x_e = end.location.x
@@ -46,6 +56,13 @@ class CubicSpiral:
         y_g = -x_t * np.sin(th_s) + y_t * np.cos(th_s)
         th_g = normalize_rad_angle(th_e - th_s) 
         k_g = k_e
+        
+        # target state
+        state_g = np.zeros((4,1))
+        state_g[0,0] = x_g
+        state_g[1,0] = y_g
+        state_g[2,0] = th_g
+        state_g[3,0] = k_g
 
         # initial guess of s_g, will be updated by Newton-Raphson method
         s_g = (th_g * th_g / 5.0 + 1.0) * np.sqrt(x_g * x_g + y_g * y_g)
@@ -56,6 +73,42 @@ class CubicSpiral:
         p[3,0] = k_g
 
         # Newton-Raphson method
+        error = 1e6 * np.ones((4,1))
+
+        iter = 0
+        while iter < self.max_iter and np.linalg.norm(error) > self.tolerance:
+
+            # update error
+            state_g_hat = self.update_goal_state(*p, s_g)
+            error = state_g - state_g_hat
+
+            # compute jacobian
+            jacobian = self.update_jacobian(*p, s_g)
+
+            # update delta_p
+            delta_p = np.linalg.inv(jacobian) @ error
+
+            # update p
+            p[1,0] += delta_p[0,0]
+            p[2,0] += delta_p[1,0]
+            p[3,0] += delta_p[2,0]
+            s_g += delta_p[3,0]
+            
+            iter += 1
+        
+        # log convergence
+        success = np.linalg.norm(error) <= self.tolerance
+        if success:
+            print("Newton-Raphson method converged in {} iterations".format(iter))
+        else:
+            print("Newton-Raphson method did not converge")
+        
+        # save results
+        self.p_params = p
+        self.a_params = self.p_to_a(*p, s_g)
+        self.s_g = s_g
+
+        return success
 
     def p_to_a(self, p0, p1, p2, p3, sg):
         """
@@ -101,7 +154,7 @@ class CubicSpiral:
 
         return da_dp
     
-    def partial_kappa_a(self, a0, a1, a2, a3, s):
+    def partial_kappa_a(self, s):
         """
         Partial derivative of kappa with respect to a
 
@@ -123,8 +176,8 @@ class CubicSpiral:
         $$
 
         """
-        a = self.p_to_a(p0, p1, p2, p3, s)
-        dk_da = self.partial_kappa_a(*a, s)
+
+        dk_da = self.partial_kappa_a(s)
         da_dp = self.partial_a_p(p0, p1, p2, p3, sg)
 
         dk_dp = dk_da.T @ da_dp
@@ -163,7 +216,6 @@ class CubicSpiral:
 
         return dth_dp
     
-
     def partial_xy_p(self, p0, p1, p2, p3, sg, s):
 
         # s to intervals
@@ -195,6 +247,73 @@ class CubicSpiral:
         """
         return a[0] * s + a[1] / 2.0 * s**2 + a[2] / 3.0 * s**3 + a[3] / 4.0 * s**4
 
+    def kappa(self, a, s):
+        """
+        Kappa function
+        """
+        return a[0] + a[1] * s + a[2] * s**2 + a[3] * s**3
+    
+    def xy(self, a, s):
+        """
+        get x and y coordinates using simpson integration
+        """
+        ds = s / (self.simpson_size - 1)
+        s_points = [i * ds for i in range(self.simpson_size)]
+        th_points = [self.theta(a, s) for s in s_points]
+
+        cos_th_points = [np.cos(th) for th in th_points]
+        sin_th_points = [np.sin(th) for th in th_points]
+
+        x = simpson(cos_th_points, s_points)
+        y = simpson(sin_th_points, s_points)
+
+        return x, y
+
+    def update_goal_state(self, p0, p1, p2, p3, sg):
+        """
+        Update goal state
+        """
+        # initialize states
+        state_g = np.zeros((4,1))
+
+        # p to a
+        a = self.p_to_a(p0, p1, p2, p3, sg)
+
+        # get goal states
+        kappa_g = self.kappa(a, sg)
+        theta_g = self.theta(a, sg)
+        x_g, y_g = self.xy(a, sg)
+
+        state_g[0,0] = x_g
+        state_g[1,0] = y_g
+        state_g[2,0] = theta_g
+        state_g[3,0] = kappa_g
+
+        return state_g 
+    
+    def update_jacobian(self, p0, p1, p2, p3, sg):
+        """
+        Update jacobian
+        """
+        # initialize jacobian
+        jacobian = np.zeros((4,4))
+
+        # partial derivative of x and y with respect to p
+        dx_dp, dy_dp = self.partial_xy_p(p0, p1, p2, p3, sg, sg)
+
+        # partial derivative of theta with respect to p
+        dth_dp = self.partial_theta_p(p0, p1, p2, p3, sg, sg)
+
+        # partial derivative of kappa with respect to p
+        dk_dp = self.partial_kappa_p(p0, p1, p2, p3, sg, sg)
+
+        jacobian[0,:] = dx_dp
+        jacobian[1,:] = dy_dp
+        jacobian[2,:] = dth_dp
+        jacobian[3,:] = dk_dp
+
+        return jacobian
+
     def _estimate_waypoint_curvature(self, waypoint, distance = 0.2):
         """
         Estimate waypoint curvature based on HD map
@@ -211,9 +330,36 @@ class CubicSpiral:
 
         return curvature 
     
-    def get_sampled_spiral(self, num_samples):
+    def get_sampled_spiral(self, num_samples) -> Trajectory:
         """
         Get sampled spirals
         """
-        pass 
+        if num_samples < 2:
+            raise ValueError("Number of samples should be greater than 1")
+
+        ds =  self.s_g / (num_samples - 1)
+
+        s_points = [i * ds for i in range(num_samples)]
+        kappa_points = [self.kappa(self.a_params, s) for s in s_points]
+        theta_points = [self.theta(self.a_params, s) for s in s_points]
+
+        # here we use trapezoidal integration instead of simpson integration to save computation time
+        x_points = [0.0] * num_samples
+        y_points = [0.0] * num_samples
+
+        for i in range(1, num_samples):
+            x_points[i] = x_points[i-1] + ds * (np.cos(theta_points[i]) + np.cos(theta_points[i-1])) / 2
+            y_points[i] = y_points[i-1] + ds * (np.sin(theta_points[i]) + np.sin(theta_points[i-1])) / 2
+
+
+        # to global frame
+        x_points = [x + self.start.x for x in x_points]
+        y_points = [y + self.start.y for y in y_points]
+        theta_points = [normalize_rad_angle(theta + self.start.theta) for theta in theta_points]
+
+        # output trajectory
+        traj = Trajectory(x_points, y_points, theta_points, kappa_points)
+
+        return traj
+
     
