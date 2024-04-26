@@ -54,7 +54,8 @@ $$
 \end{align}
 $$
 
-Because $p_0$ can be know from starting point, we only need find $\bold{p} = [p_1, p_2, p_3, s_g]$.
+Once we know $\bold{p} = [p_0, p_1, p_2, p_3]$ and $s_g$, we will know $\bold{a}$. 
+Because $p_0$ and $p_3$ can be know from starting point and goal point, we need find $p_1, p_2, s_g$ to solve the root-finding problem.
 The following derivative holds from kinematic constraints:
 
 $$
@@ -66,10 +67,10 @@ $$
 $$
 
 
-Let the state of the waypoint $\bold{x}(s) = [x(s), y(s),\theta(s), \kappa(s)]$, the objective is to find the optimal $\bold{p}$ so that the end point of the cubic spiral can be as close as possible to the goal waypoint. The root find problem can be defined as:
+Let the state of the waypoint $\bold{x}(s) = [x(s), y(s),\theta(s)]$, the objective is to find the optimal $\bold{p}$ so that the end point of the cubic spiral can be as close as possible to the goal waypoint. The root-finding problem can be defined as:
 
 $$
-f(\bold{p}) = ||\bold{x}(\bold{p}) - \bold{x}_g||^2
+f(\bold{p}) = \bold{x}_g-\bold{x}(\bold{p}) = 0
 $$
 
 Using Newton-Raphson method, the optimal $\bold{p}$ can be found by iteratively solving the following equation:
@@ -85,39 +86,86 @@ $$
 The Jacobian matrix $\bold{J}$ is defined as:
 
 $$
-\bold{J}(\bold{x}(\bold{p}_i)) = \frac{\partial \bold{x}(\bold{p}_i, s_g)}{\partial \bold{p}_i}
-$$
-
-Explicitly, the Jacobian matrix is:
-
-$$
 \bold{J}(\bold{x}(\bold{p}_i)) 
-= \begin{bmatrix}
-\frac{\partial x(\bold{p}_i, s_g)}{\partial \bold{p}_i} \\
-\frac{\partial y(\bold{p}_i, s_g)}{\partial \bold{p}_i} \\
-\frac{\partial \theta(\bold{p}_i, s_g)}{\partial \bold{p}_i} \\
-\frac{\partial \kappa(\bold{p}_i, s_g)}{\partial \bold{p}_i} \\
-\end{bmatrix}
 =
 \begin{bmatrix}
-\frac{\partial x(\bold{p}_i, s_g)}{\partial p_1} & \frac{\partial x(\bold{p}_i, s_g)}{\partial p_2} & \frac{\partial x(\bold{p}_i, s_g)}{\partial p_3} & \frac{\partial x(\bold{p}_i, s_g)}{\partial s_g} \\
-\frac{\partial y(\bold{p}_i, s_g)}{\partial p_1} & \frac{\partial y(\bold{p}_i, s_g)}{\partial p_2} & \frac{\partial y(\bold{p}_i, s_g)}{\partial p_3} & \frac{\partial y(\bold{p}_i, s_g)}{\partial s_g} \\
-\frac{\partial \theta(\bold{p}_i, s_g)}{\partial p_1} & \frac{\partial \theta(\bold{p}_i, s_g)}{\partial p_2} & \frac{\partial \theta(\bold{p}_i, s_g)}{\partial p_3} & \frac{\partial \theta(\bold{p}_i, s_g)}{\partial s_g} \\
-\frac{\partial \kappa(\bold{p}_i, s_g)}{\partial p_1} & \frac{\partial \kappa(\bold{p}_i, s_g)}{\partial p_2} & \frac{\partial \kappa(\bold{p}_i, s_g)}{\partial p_3} & \frac{\partial \kappa(\bold{p}_i, s_g)}{\partial s_g} \\
+\frac{\partial x(\bold{p}_i, s_g)}{\partial p_1} & \frac{\partial x(\bold{p}_i, s_g)}{\partial p_2} & \frac{\partial x(\bold{p}_i, s_g)}{\partial s_g} \\
+\frac{\partial y(\bold{p}_i, s_g)}{\partial p_1} & \frac{\partial y(\bold{p}_i, s_g)}{\partial p_2} & \frac{\partial y(\bold{p}_i, s_g)}{\partial s_g} \\
+\frac{\partial \theta(\bold{p}_i, s_g)}{\partial p_1} & \frac{\partial \theta(\bold{p}_i, s_g)}{\partial p_2} & \frac{\partial \theta(\bold{p}_i, s_g)}{\partial s_g} \\
 \end{bmatrix}
 $$
 
-The partial derivatives can be calculated as:
+For notion completeness, we use the whole $\bold{p}$ vector in the Jacobian matrix:
+$$
+\bold{J}(\bold{x}(\bold{p}_i, s_g)) = [\frac{\partial \bold{x}(\bold{p}_i, s_g)}{\partial \bold{p}}, \frac{\partial \bold{x}(\bold{p}_i, s_g)}{\partial s_g}]
+$$
+
+This leads to a 3x5 matrix, but we need remove the fisrt column (related to $p_0$) and the forth column (related to $p_3$) to make the matrix 3x3 for the Newton-Raphson method.
+
+
+Knowing the following method to calculate the derivatives for a definite integral:
+
+$$
+F(x) = \int_{v(x)}^{g(x)} f(t)dt
+$$
+
+$$
+\frac{dF(x)}{dx} = f(g(x))g'(x) - f(v(x))v'(x)
+$$
+
+For 
+$$
+F(x, y) = \int_0^x f(t,y)dt
+$$
+
+The derivative can be calculated as:
+
 $$
 \begin{align}
-\frac{\partial \kappa(\bold{p}_i, s)}{\partial \bold{p}_i} &= \frac{\partial \kappa(\bold{p}_i, s)}{\partial \bold{a}} \frac{\partial \bold{a}}{\partial \bold{p}} \\
-\frac{\partial \theta(\bold{p}_i, s)}{\partial \bold{p}_i} &= \frac{\partial \theta(\bold{p}_i, s)}{\partial \bold{a}} \frac{\partial \bold{a}}{\partial \bold{p}} \\
-\frac{\partial y(\bold{p}_i, s)}{\partial \bold{p}_i} &= \frac{\partial \int_0^s \sin(\theta (s'))ds'}{\partial \bold{p}_i} = \int_0^s \frac{\partial \sin(\theta(s'))}{\partial \bold{p}_i}ds' = \int_0^s \cos(\theta(s'))\frac{\partial \theta(s')}{\partial \bold{p}_i}ds'\\
-\frac{\partial x(\bold{p}_i, s)}{\partial \bold{p}_i} &= \frac{\partial \int_0^s \cos(\theta(s'))ds'}{\partial \bold{p}_i} = \int_0^s \frac{\partial \cos(\theta(s'))}{\partial \bold{p}_i} ds'= -\int_0^s \sin(\theta(s'))\frac{\partial \theta(s')}{\partial \bold{p}_i}ds' \\
+\frac{dF(x,y)}{dx} &= \frac{\partial F(x,y)}{\partial x} + \frac{\partial F(x,y)}{\partial y}\frac{dy}{dx} \\
+\frac{dF(x,y)}{dy} &= \frac{\partial F(x,y)}{\partial y} + \frac{\partial F(x,y)}{\partial x} \frac{dx}{dy}\\
 \end{align}
 $$
 
-The integrals can be solved using numerical integration methods, such as the trapezoidal rule or Simpson's rule.
+If $x$ and $y$ are independent, then $\frac{dx}{dy} = 0$, and $\frac{dy}{dx} = 0$.
+Thus,
+
+$$
+\begin{align}
+\frac{dF(x,y)}{dx} &= \frac{\partial F(x,y)}{\partial x} = f(x,y) \\
+\frac{dF(x,y)}{dy} &= \frac{\partial F(x,y)}{\partial y} = \int_0^{x} \frac{\partial f(t,y)}{\partial y} dt\\
+\end{align}
+$$
+
+
+If $x$ and $y$ are dependent, we can assume $y = y(x)$, then
+
+$$
+\begin{align}
+\frac{dF(x,y)}{dx} &= \frac{\partial F(x,y)}{\partial x} + \frac{\partial F(x,y)}{\partial y}\frac{dy}{dx} = f(x,y) + \int_0^{x} \frac{\partial f(t,y)}{\partial y} dt \frac{dy}{dx} \\
+\frac{dF(x,y)}{dy} &= \frac{\partial F(x,y)}{\partial y} + \frac{\partial F(x,y)}{\partial x} \frac{dx}{dy} = \int_0^{x} \frac{\partial f(t,y)}{\partial y} dt + f(x,y) \frac{dx}{dy}\\
+\end{align}
+$$
+
+
+For the cubic spiral trajectory, the derivatives can be calculated as:
+
+
+Based on the above folulation, the partial derivatives in the Jacobian matrix can be calculated as:
+$$
+\begin{align}
+\frac{\partial \theta(\bold{p}_i, s)}{\partial \bold{p}} &= \frac{\partial \theta(\bold{p}_i, s)}{\partial \bold{a}} \frac{\partial \bold{a}}{\partial \bold{p}} \\
+\frac{\partial \theta(\bold{p}_i, s)}{\partial s_g} &= \frac{\partial \theta(\bold{p}_i, s)}{\partial \bold{a}} \frac{\partial \bold{a}}{\partial s_g}\\
+\frac{\partial y(\bold{p}_i, s)}{\partial \bold{p}} |_{s=s_g} &= \frac{\partial \int_0^{s_g} \sin(\theta(\bold p_i, s'))ds'}{\partial \bold{p}} = \int_0^{s_g} \frac{\partial \sin(\theta(\bold p_i, s'))}{\partial \bold{p}} ds'= \int_0^{s_g} \cos(\theta(\bold p_i, s'))\frac{\partial \theta(\bold p_i, s')}{\partial \bold{p}}ds' \\
+\frac{\partial y(\bold{p}_i, s)}{\partial s_g} |_{s = s_g} &= \frac{\partial y(\bold p_i, s_g)}{\partial s_g} + \frac{\partial y(\bold p_i, s_g)}{\partial \bold p}\frac{\partial \bold p_i}{\partial s_g} 
+= \sin(\theta(\bold p_i(s_g), s_g)) + \int_0^{s_g} \cos(\theta(\bold p_i(s_g), s'))\frac{\partial \theta(\bold p_i(s_g), s')}{\partial s_g}ds' \\
+\frac{\partial x(\bold{p}_i, s)}{\partial \bold{p}} |_{s=s_g} &= \frac{\partial \int_0^{s_g} \cos(\theta(\bold p_i, s'))ds'}{\partial \bold{p}} = \int_0^{s_g} \frac{\partial \cos(\theta(\bold p_i, s'))}{\partial \bold{p}} ds'= -\int_0^{s_g} \sin(\theta(\bold p_i, s'))\frac{\partial \theta(\bold p_i, s')}{\partial \bold{p}}ds' \\
+\frac{\partial x(\bold{p}_i, s)}{\partial s_g} |_{s = s_g} &= \frac{\partial x(\bold p_i, s_g)}{\partial s_g} + \frac{\partial x(\bold p_i, s_g)}{\partial \bold p}\frac{\partial \bold p_i}{\partial s_g} 
+= \cos(\theta(\bold p_i(s_g), s_g)) - \int_0^{s_g} \sin(\theta(\bold p_i(s_g), s'))\frac{\partial \theta(\bold p_i(s_g), s')}{\partial s_g}ds' \\
+\end{align}
+$$
+
+The integrals on the right-hand side can be solved using numerical integration methods, such as the trapezoidal rule or Simpson's rule.
 
 ## 3.2 Trajectory Following
 
