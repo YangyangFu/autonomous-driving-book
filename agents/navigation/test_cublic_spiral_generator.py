@@ -31,6 +31,11 @@ def test_generate_spiral():
         spiral = CubicSpiral()
         spiral.generate_spiral(start_wp, end_wp)
 
+        # get trajectory
+        traj = spiral.get_sampled_trajectory(40)
+        for i, point in enumerate(traj):
+            print(f"Point {i}: x={point.x}, y={point.y}, theta={point.theta}, kappa={point.kappa}")
+
     finally:
         if world is not None:
             world.destroy()

@@ -83,11 +83,11 @@ class CubicSpiral:
         while iter < self.max_iter and np.linalg.norm(error) > self.tolerance:
 
             # update error
-            state_g_hat = self.update_goal_state(*p, s_g)
+            state_g_hat = self.update_goal_state(p, s_g)
             error = state_g - state_g_hat
             
             # compute jacobian
-            jacobian = self.update_jacobian(*p, s_g)
+            jacobian = self.update_jacobian(p, s_g)
             jacobian = jacobian[:, [1,2,4]]
             
             if iter % 10 == 0:
@@ -121,22 +121,22 @@ class CubicSpiral:
         
         # save results
         self.p_params = p
-        self.a_params = self.p_to_a(*p, s_g)
+        self.a_params = self.p_to_a(p, s_g)
         self.s_g = s_g
 
         return success
 
-    def p_to_a(self, p0, p1, p2, p3, sg):
+    def p_to_a(self, p, sg):
         """
         Convert p to a
         """
         sg_inv = 1.0 / sg
 
         a = np.zeros(4)
-        a[0] = p0
-        a[1] = - (11*p0 - 18*p1 + 9*p2 - 2*p3) / 2.0 * sg_inv
-        a[2] = 9*(2*p0 - 5*p1 + 4*p2 - p3) / 2.0 * sg_inv**2
-        a[3] = -9*(p0 - 3*p1 + 3*p2 - p3) / 2.0 * sg_inv**3
+        a[0] = p[0]
+        a[1] = - (11*p[0] - 18*p[1] + 9*p[2] - 2*p[3]) / 2.0 * sg_inv
+        a[2] = 9*(2*p[0] - 5*p[1] + 4*p[2] - p[3]) / 2.0 * sg_inv**2
+        a[3] = -9*(p[0] - 3*p[1] + 3*p[2] - p[3]) / 2.0 * sg_inv**3
 
         return a
 
@@ -175,7 +175,7 @@ class CubicSpiral:
 
         return da_dp
     
-    def partial_a_sg(self, p0, p1, p2, p3, sg):
+    def partial_a_sg(self,p, sg):
         """
         Partial derivative of a with respect to sg
 
@@ -186,6 +186,7 @@ class CubicSpiral:
         -9*(p0-3*p1+3*p2-p3)/2*(-3/sg**4)]
 
         """
+        p0, p1, p2, p3 = p
         sg_inv = 1.0 / sg
         da_ds = np.zeros(4)
 
@@ -246,57 +247,6 @@ class CubicSpiral:
 
         return dth_dp
     
-    def partial_xy_p(self, p0, p1, p2, p3, sg, s):
-        """
-        Partial derivative of x and y with respect to p = [p0, p1, p2, p3, sg]
-        
-        """
-        # s to intervals
-        ds = s / (self.simpson_size - 1) 
-
-        # (n,)
-        s_points = [i * ds for i in range(self.simpson_size)]
-        a = self.p_to_a(p0, p1, p2, p3, sg)
-
-        # (n,)
-        th_points = np.array([self.theta(a, s) for s in s_points])
-        # (n, 4)
-        dth_dp_points = np.vstack([self.partial_theta_p(sg, s) for s in s_points])
-        # (n, )
-        dth_dsg_points = np.array([self.partial_a_sg(p0, p1, p2, p3, sg, s) for s in s_points])
-
-        # for x, y
-        sin_th_points = np.array([np.sin(th) for th in th_points])
-        cos_th_points = np.array([np.cos(th) for th in th_points])
-
-        # (n, 4) = (n, 1) * (n, 4)
-        sin_th_dth_dp = sin_th_points.reshape(-1, 1) * dth_dp_points
-        cos_th_dth_dp = cos_th_points.reshape(-1, 1) * dth_dp_points
-        
-        # (n, ) = (n, ) * (n, )
-        sin_th_dth_dsg = sin_th_points * dth_dsg_points
-        cos_th_dth_dsg = cos_th_points * dth_dsg_points
-
-        # simpson integration
-        # (4,)
-        dx_dp = -simpson(sin_th_dth_dp.T, x = s_points)
-        dy_dp = simpson(cos_th_dth_dp.T, x = s_points)
-        # (1,)
-        dx_dsg = cos_th_points[-1] - simpson(sin_th_dth_dsg, x = s_points)
-        dy_dsg = sin_th_points[-1] + simpson(cos_th_dth_dsg, x = s_points)
-
-        # jacobian
-        jacobian = np.zeros((3,5))
-        jacobian[0,:-1] = dx_dp
-        jacobian[0,-1] = dx_dsg
-        jacobian[1,:-1] = dy_dp
-        jacobian[1,-1] = dy_dsg
-        jacobian[2,:-1] = dth_dp_points[-1,:]
-        jacobian[2,-1] = dth_dsg_points[-1]
-
-
-        return dx_dp.reshape(1, -1), dy_dp.reshape(1, -1)
-
     def theta(self, a, s):
         """
         Theta function
@@ -325,7 +275,7 @@ class CubicSpiral:
 
         return x, y
 
-    def update_goal_state(self, p0, p1, p2, p3, sg):
+    def update_goal_state(self, p, sg):
         """
         Update goal state
         """
@@ -333,7 +283,7 @@ class CubicSpiral:
         state_g = np.zeros(3)
 
         # p to a
-        a = self.p_to_a(p0, p1, p2, p3, sg)
+        a = self.p_to_a(p, sg)
 
         # get goal states
         #kappa_g = self.kappa(a, sg)
@@ -347,21 +297,21 @@ class CubicSpiral:
 
         return state_g 
     
-    def partial_dth_dsg(self, p0, p1, p2, p3, s, sg):
+    def partial_dth_dsg(self, p, s, sg):
         """
         Partial derivative of theta with respect to s_g
         """
         # (4, )
         dth_da = self.partial_theta_a(s)
         # (4,)
-        da_dsg = self.partial_a_sg(p0, p1, p2, p3, sg)
+        da_dsg = self.partial_a_sg(p, sg)
 
         # (1,) = (1,4) @ (4, 1)
         dth_dsg = dth_da.reshape(1,-1) @ da_dsg.reshape(-1, 1)
         
         return dth_dsg
     
-    def update_jacobian(self, p0, p1, p2, p3, sg):
+    def update_jacobian(self, p, sg):
         """
         Update jacobian
         """
@@ -370,14 +320,14 @@ class CubicSpiral:
 
         # (n,)
         s_points = [i * ds for i in range(self.simpson_size)]
-        a = self.p_to_a(p0, p1, p2, p3, sg)
+        a = self.p_to_a(p, sg)
 
         # (n,)
         th_points = np.array([self.theta(a, s) for s in s_points])
         # (n, 4)
         dth_dp_points = np.vstack([self.partial_theta_p(sg, s) for s in s_points])
         # (n, )
-        dth_dsg_points = np.array([self.partial_dth_dsg(p0, p1, p2, p3, s, sg) for s in s_points]).flatten()
+        dth_dsg_points = np.array([self.partial_dth_dsg(p, s, sg) for s in s_points]).flatten()
 
         # for x, y
         sin_th_points = np.array([np.sin(th) for th in th_points]).reshape(-1)
@@ -426,7 +376,7 @@ class CubicSpiral:
 
         return curvature 
     
-    def get_sampled_spiral(self, num_samples) -> Trajectory:
+    def get_sampled_trajectory(self, num_samples) -> Trajectory:
         """
         Get sampled spirals
         """
