@@ -5,7 +5,7 @@ from scipy import linalg
 import carla
 
 from agents.tools.misc import normalize_rad_angle
-from agents.navigation.trajectory import Trajectory, RoadPoint
+from agents.navigation.trajectory import Path, PathPoint
 
 class CubicSpiral:
     """
@@ -41,7 +41,7 @@ class CubicSpiral:
         th_s = normalize_rad_angle(np.radians(start.transform.rotation.yaw)) 
         k_s = self._estimate_waypoint_curvature(start)
 
-        self.start = RoadPoint(x_s, y_s, th_s, k_s)
+        self.start = PathPoint(x_s, y_s, th_s, k_s)
 
         # ending point
         x_e = end.transform.location.x
@@ -376,7 +376,7 @@ class CubicSpiral:
 
         return curvature 
     
-    def get_sampled_trajectory(self, num_samples) -> Trajectory:
+    def get_sampled_trajectory(self, num_samples) -> Path:
         """
         Get sampled spirals
         """
@@ -404,9 +404,9 @@ class CubicSpiral:
         theta_points = [normalize_rad_angle(theta + self.start.theta) for theta in theta_points]
 
         # output trajectory
-        traj = Trajectory(x_points, y_points, theta_points, kappa_points)
+        path = Path(x_points, y_points, theta_points, kappa_points)
 
-        return traj
+        return path
     
 
     
