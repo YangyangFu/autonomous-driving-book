@@ -70,8 +70,12 @@ class TrajectoryPoint:
     t: float # relative time from start
 
 class Trajectory:
-    def __init__(self):
+    def __init__(self, path: Path, v: List, t: List):
+        assert len(path) == len(v) == len(t), "All input lists should have the same length"
+
         self.traj = []
+        for i in range(len(path)):
+            self.traj.append(TrajectoryPoint(path[i], v[i], t[i]))
 
     def push_back(self, path_point, v, t):
         """
@@ -107,7 +111,29 @@ class Trajectory:
             return point
         else:
             raise StopIteration
-        
+    
+    @property
+    def x(self):
+        return [point.path_point.x for point in self.traj]
+    @property
+    def y(self):
+        return [point.path_point.y for point in self.traj]
+    @property
+    def theta(self):
+        return [point.path_point.theta for point in self.traj]
+    @property
+    def kappa(self):
+        return [point.path_point.kappa for point in self.traj]
+    @property
+    def s(self):
+        return [point.path_point.s for point in self.traj]
+    @property
+    def v(self):
+        return [point.v for point in self.traj]
+    @property
+    def t(self):
+        return [point.t for point in self.traj]
+    
 # add some test
 def test_path():
     traj = Path([0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2])
@@ -142,12 +168,11 @@ def test_path():
 
 # test trajectory
 def test_trajectory():
-    traj = Trajectory()
+    
     path = Path([0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2], [0, 1, 2])
     v_list = [10, 20, 30]
     t_list = [0, 1, 2]
-    for i in range(len(path)):
-        traj.push_back(path[i], v_list[i], t_list[i])
+    traj = Trajectory(path, v_list, t_list)
     
     assert len(traj) == 3
     front = traj.pop_front()
@@ -180,6 +205,15 @@ def test_trajectory():
         assert point.path_point.s == i + 1
         assert point.v == v_list[i + 1]
         assert point.t == t_list[i + 1]
+
+    # test properties
+    assert traj.x == [1, 2]
+    assert traj.y == [1, 2]
+    assert traj.theta == [1, 2]
+    assert traj.kappa == [1, 2]
+    assert traj.s == [1, 2]
+    assert traj.v == [20, 30]
+    assert traj.t == [1, 2]
 
     print("Trajectory test passed")
 

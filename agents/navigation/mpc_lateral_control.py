@@ -1,10 +1,13 @@
 """
 Model Predictive Control (MPC) Lateral Controller
 """
+import numpy as np 
 import carla 
 Waypoint = carla.Waypoint
 
+from agents.navigation.trajectory import Path, Trajectory
 from agents.navigation.cubic_spiral_generator import CubicSpiral
+from agents.navigation.linear_interpolation import LinearInterpolation
 
 class MPC:
     def __init__(self, state_dim, control_dim, output_dim, dt, horizon, model_name, model_params, Q, R):
@@ -42,17 +45,11 @@ class MPC:
 
     # since the reference trajectory does not take into account the current velocity of the vehicle,
     # we need calculate the trajectory velocity considering the longitudinal dynamics
-    def set_reference_trajectory(self, trajectory):
+    def set_reference_trajectory(self, trajectory: Trajectory):
         """
-        Set reference trajectory
+        Set reference trajectory from the planner
         """
-        pass 
-
-    def generate_trajectory_with_velocity(self):
-        """
-        Generate trajectory with velocity
-        """
-        pass
+        self.reference_trajectory = trajectory 
 
     def calculate_initial_state(self):
         """
@@ -66,19 +63,50 @@ class MPC:
         """
         pass
 
-    def resample_trajectory_for_mpc(self):
+    def resample_trajectory_for_by_time(self, in_traj: Trajectory) -> Trajectory:
         """
         Resample reference trajectory for with mpc sampling time
         """
-        pass
 
+        # calculate the output time
+        out_time = np.arange(in_traj.t[0], in_traj.t[-1], self.dt)
+
+        # linear interpolation
+        out_traj = self._linear_interp_(in_traj.t, in_traj, out_time)
+
+        return out_traj
+        
+        
+    def _linear_interp_(self, in_time, in_traj: Trajectory, out_time) -> Trajectory:
+        """
+        Linear interpolation given raw trajectory and output equidistant time trajectory
+        """
+
+        interp = LinearInterpolation()
+
+        # interpolate x, y, yaw, v, t
+        out_x = interp.interpolate(in_time, in_traj.x, out_time)
+        out_y = interp.interpolate(in_time, in_traj.y, out_time)
+        out_theta = interp.interpolate(in_time, in_traj.theta, out_time)
+        out_kappa = interp.interpolate(in_time, in_traj.kappa, out_time)
+        out_s = interp.interpolate(in_time, in_traj.s, out_time)
+        out_v = interp.interpolate(in_time, in_traj.v, out_time)
+        out_t = out_time
+
+        # output interpolated trajectory
+        out_traj = Trajectory(Path(out_x, out_y, out_theta, out_kappa, out_s), out_v, out_t)
+
+        return out_traj
+
+    
     def update_state_space_matrix(self):
         """
         Update state space matrix
         """
         
-        return Ad, Bd, wd, Cd 
-    
+        #return Ad, Bd, wd, Cd  
+        pass 
+
     def run_optimization(self):
         """
         Run optimization to return optimal control inputs
@@ -98,12 +126,7 @@ class MPC:
         pass
 
 
-class MPCTrajectory:
-    """
-    Model Predictive Control (MPC) Trajectory
-    """
-    pass
- 
+
 class MPCLateralControl():
     def __init__(self, vehicle):
         self._vehicle = vehicle
