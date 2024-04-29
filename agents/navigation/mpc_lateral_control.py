@@ -1,13 +1,27 @@
 """
 Model Predictive Control (MPC) Lateral Controller
 """
+import cvxpy as cp
 import numpy as np 
 import carla 
 Waypoint = carla.Waypoint
 
+from agents.navigation.vehicle_model import DynamicBicycleModel
 from agents.navigation.trajectory import Path, Trajectory
 from agents.navigation.cubic_spiral_generator import CubicSpiral
 from agents.navigation.linear_interpolation import LinearInterpolation
+
+class Pose:
+    x: float 
+    y: float
+    yaw: float
+    v: float
+
+class MPCState:
+    e: float # lateral error
+    de: float # lateral error rate
+    the: float # heading error
+    dthe: float # heading error rate
 
 class MPC:
     def __init__(self, state_dim, control_dim, output_dim, dt, horizon, model_name, model_params, Q, R):
@@ -35,13 +49,46 @@ class MPC:
         self.model_params = model_params
         self.Q = Q
         self.R = R
+        self.max_steering = 1.0
+        self.max_steering_rate = 0.1
 
         self.model = self._initiate_vehichle_model(model_name, model_params)
 
-    def run(self, state, trajectory):
+    def _initiate_vehichle_model(self, model_name, model_params):
+        """
+        Initiate vehicle model
+        """
+        if model_name == "dynamic_bicycle":
+            self.model = DynamicBicycleModel(**model_params)
+        else:
+            raise ValueError("Model not supported yet.")
+
+    def run(self, init_state: MPCState, reference_trajectory: Trajectory):
         """
         Run MPC controller
         """
+        # resample trajectory for with mpc sampling time
+        mpc_traj = self.resample_trajectory_by_time(reference_trajectory)
+
+        # calculate initial state: zero or from last step?
+        # self.calculate_initial_state()
+
+        # update state for delay compensation
+        # self.update_state_for_delay_compensation()
+
+        # update state space matrix
+        Ad, Bd, wd, Cd = self.update_state_space_matrix()
+
+        # run optimization to return optimal control inputs
+        u = self.run_optimization()
+
+        # apply input limitsv
+        u = self.apply_input_limits(u)
+
+        # calculate predicted trajectory
+        predicted_trajectory = self.calculate_predicted_trajectory()
+
+        return u, predicted_trajectory
 
     # since the reference trajectory does not take into account the current velocity of the vehicle,
     # we need calculate the trajectory velocity considering the longitudinal dynamics
@@ -51,11 +98,12 @@ class MPC:
         """
         self.reference_trajectory = trajectory 
 
-    def calculate_initial_state(self):
+    def calculate_initial_state(self, pose: Pose):
         """
-        Calculate initial state
+        Calculate initial MPC state based on vehicle pose
         """
         pass
+        
 
     def update_state_for_delay_compensation(self):
         """
@@ -63,13 +111,13 @@ class MPC:
         """
         pass
 
-    def resample_trajectory_for_by_time(self, in_traj: Trajectory) -> Trajectory:
+    def resample_trajectory_by_time(self, in_traj: Trajectory) -> Trajectory:
         """
         Resample reference trajectory for with mpc sampling time
         """
 
         # calculate the output time
-        out_time = np.arange(in_traj.t[0], in_traj.t[-1], self.dt)
+        out_time = np.arange(0, self.horizon * self.dt, self.dt)
 
         # linear interpolation
         out_traj = self._linear_interp_(in_traj.t, in_traj, out_time)
@@ -99,25 +147,63 @@ class MPC:
         return out_traj
 
     
-    def update_state_space_matrix(self):
+    def update_state_space_matrix(self, velocity: float, curvature:float):
         """
-        Update state space matrix
+        Update state space matrix for a given velocity and curvature 
         """
         
         #return Ad, Bd, wd, Cd  
-        pass 
+        self.model.set_velocity(velocity)
+        self.model.set_curvature(curvature)
+        self.model.update_matrix() 
+        self.model.update_discrete_matrix(self.dt)
 
-    def run_optimization(self):
-        """
-        Run optimization to return optimal control inputs
-        """
-        pass
+        return self.model.Ad, self.model.Bd, self.model.Wd, self.model.Cd
 
-    def apply_input_limits(self):
+    def run_optimization(self, init_state: MPCState, mpc_traj: Trajectory):
         """
-        Apply input limits 
+        Formulate and run optimization to return optimal control inputs
         """
-        pass
+        # define optimization variables
+        u = cp.Variable((self.control_dim, self.horizon))
+
+        # define state variables
+        x = cp.Variable((self.state_dim, self.horizon+1))
+
+        # define constraints
+        # equality constraints
+        constraints = []
+        x0 = np.array([init_state.e, init_state.de, init_state.the, init_state.dthe])
+        constraints += [x[:, 0] == x0]
+        
+        for i in range(1, self.horizon+1):
+            vi = mpc_traj[i].v
+            ki = mpc_traj[i].kappa
+            Ad, Bd, Wd, Cd = self.update_state_space_matrix(vi, ki)
+            constraints += [x[:, i] == Ad @ x[:, i-1] + Bd @ u + Wd]
+
+        # inequality constraints due to input limits
+        # umin <= u <= umax
+        # dumin*dt <= du <= dumax*dt
+        for i in range(self.horizon):
+            constraints += [u[:, i] <= self.max_steering], [u[:, i] >= -self.max_steering]
+        
+        for i in range(self.horizon-1):
+            constraints += [u[:, i+1] - u[:, i] <= self.max_steering_rate * self.dt], [u[:, i+1] - u[:, i] >= -self.max_steering_rate * self.dt]
+
+
+        # define cost function
+        cost = 0
+        for i in range(1, self.horizon+1):
+            cost += cp.quad_form(x[:, i], self.Q) + cp.quad_form(u[:, i-1], self.R)
+
+        # define optimization problem
+        prob = cp.Problem(cp.Minimize(cost), constraints)
+
+        # solve optimization
+        prob.solve()
+
+        return u
 
     def calculate_predicted_trajectory(self):
         """
