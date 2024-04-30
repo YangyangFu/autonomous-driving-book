@@ -7,7 +7,7 @@ import carla
 Waypoint = carla.Waypoint
 
 from agents.navigation.vehicle_model import DynamicBicycleModel
-from agents.navigation.trajectory import Path, Trajectory
+from agents.navigation.trajectory import Path, PathPoint, Trajectory, TrajectoryPoint
 from agents.navigation.cubic_spiral_generator import CubicSpiral
 from agents.navigation.linear_interpolation import LinearInterpolation
 
@@ -54,6 +54,10 @@ class MPC:
 
         self.model = self._initiate_vehichle_model(model_name, model_params)
 
+        # for estimating state
+        self._prev_e = 0.0
+        self._prev_th = 0.0
+
     def _initiate_vehichle_model(self, model_name, model_params):
         """
         Initiate vehicle model
@@ -98,13 +102,44 @@ class MPC:
         """
         self.reference_trajectory = trajectory 
 
-    def calculate_initial_state(self, pose: Pose):
+    def calculate_initial_state(self, curr_pose: Pose, ref_pose: TrajectoryPoint):
         """
         Calculate initial MPC state based on vehicle pose
         """
-        pass
-        
+        curr_state = np.zeros(self.state_dim)
+        e = self._cal_lateral_error(curr_pose, ref_pose)
+        th = self._normalize_angle(curr_pose.yaw - ref_pose.path_point.theta)
+        de = (e - self._prev_e) / self.dt
+        dth = (th - self._prev_th) / self.dt
 
+        curr_state[0] = e
+        curr_state[1] = de
+        curr_state[2] = th
+        curr_state[3] = dth
+
+        self._prev_e = e
+        self._prev_th = th
+
+        return curr_state
+
+    def _cal_lateral_error(self, curr_pose: Pose, ref_pose: TrajectoryPoint):
+        """
+        Calculate lateral error
+        """
+        error_x = curr_pose.x - ref_pose.path_point.x
+        error_y = curr_pose.y - ref_pose.path_point.y
+        ref_yaw = ref_pose.path_point.theta
+        
+        lat_error = -np.sin(ref_yaw) * error_x + np.cos(ref_yaw) * error_y
+
+        return lat_error
+    
+    def _normalize_angle(self, angle):
+        """
+        Normalize angle in radians to [-pi, pi].
+        """
+        return (angle + np.pi) % (2 * np.pi) - np.pi
+    
     def update_state_for_delay_compensation(self):
         """
         Update state for delay compensation
@@ -117,7 +152,7 @@ class MPC:
         """
 
         # calculate the output time
-        out_time = np.arange(0, self.horizon * self.dt, self.dt)
+        out_time = self.dt * np.arange(1, self.horizon + 1, 1)
 
         # linear interpolation
         out_traj = self._linear_interp_(in_traj.t, in_traj, out_time)
@@ -205,13 +240,42 @@ class MPC:
 
         return u
 
-    def calculate_predicted_trajectory(self):
+    def calculate_predicted_trajectory(self, curr_state: MPCState, u, ref_traj: Trajectory) -> Trajectory:
         """
         Calculate predicted trajectory
         """
-        pass
+        predicted_traj = Trajectory()
+        
+        # initialize
+        # (4,1)
+        state = np.array([curr_state.e, curr_state.de, curr_state.the, curr_state.dthe]).reshape(-1, 1)
 
+        # iterate over the horizon
+        for i in range(self.horizon):
+            vi = ref_traj[i].v
+            ki = ref_traj[i].kappa
+            Ad, Bd, Wd, Cd = self.update_state_space_matrix(vi, ki)
+            state = Ad @ state + Bd @ u[:, i] + Wd
+            mpc_state = MPCState(e=state[0], de=state[1], the=state[2], dthe=state[3])
+            path_point = self.convert_state_to_pathpoint(mpc_state, ref_traj[i])
 
+            predicted_traj.push_back(path_point, vi, self.dt * (i + 1))
+
+        return predicted_traj
+    
+    def convert_state_to_pathpoint(self, state: MPCState, ref_pose: TrajectoryPoint) -> PathPoint:
+        """
+        Convert MPC state to PathPoint
+        """
+        x = ref_pose.path_point.x - state.e * np.sin(ref_pose.path_point.theta)
+        y = ref_pose.path_point.y + state.e * np.cos(ref_pose.path_point.theta)
+        theta = ref_pose.path_point.theta + state.the
+        kappa = ref_pose.path_point.kappa
+        s = ref_pose.path_point.s
+
+        return PathPoint(x, y, theta, kappa, s)
+
+        
 
 class MPCLateralControl():
     def __init__(self, vehicle):
@@ -231,7 +295,7 @@ class MPCLateralControl():
         """
         pass 
 
-    def generate_mpc_trajectory(self, goal_waypoint) -> MPCTrajectory:
+    def generate_mpc_trajectory(self, goal_waypoint) -> Trajectory:
         """
         Generate MPC trajectory
         
