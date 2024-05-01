@@ -70,12 +70,13 @@ class TrajectoryPoint:
     t: float # relative time from start
 
 class Trajectory:
-    def __init__(self, path: Path, v: List, t: List):
-        assert len(path) == len(v) == len(t), "All input lists should have the same length"
-
+    def __init__(self, path: Path = None, v: List = None, t: List = None):
         self.traj = []
-        for i in range(len(path)):
-            self.traj.append(TrajectoryPoint(path[i], v[i], t[i]))
+        if path is not None:
+            assert len(path) == len(v) == len(t), "All input lists should have the same length"
+
+            for i in range(len(path)):
+                self.traj.append(TrajectoryPoint(path[i], v[i], t[i]))
 
     def push_back(self, path_point, v, t):
         """

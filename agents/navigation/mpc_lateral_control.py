@@ -1,6 +1,9 @@
 """
 Model Predictive Control (MPC) Lateral Controller
 """
+from dataclasses import dataclass
+from collections import deque 
+
 import cvxpy as cp
 import numpy as np 
 import carla 
@@ -12,12 +15,14 @@ from agents.navigation.cubic_spiral_generator import CubicSpiral
 from agents.navigation.linear_interpolation import LinearInterpolation
 from agents.navigation.velocity_profile_generator import VelocityGenerator
 
+@dataclass
 class Pose:
     x: float 
     y: float
     yaw: float
     v: float
 
+@dataclass
 class MPCState:
     e: float # lateral error
     de: float # lateral error rate
@@ -46,7 +51,7 @@ class MPC:
         self.model_params = model_params
         
         # dimensions
-        self.model = self._initiate_vehichle_model(model_name, model_params)
+        self._initiate_vehichle_model(model_name, model_params)
         self.state_dim = self.model.state_dim
         self.control_dim = self.model.control_dim
         self.output_dim = self.model.output_dim
@@ -55,8 +60,8 @@ class MPC:
         self.dt = dt
         self.horizon = horizon
         self.steps = int(horizon / dt)
-        self.Q = [Q, 0, 0, 0] # state cost matrix
-        self.R = [R] # control cost matrix
+        self.Q = np.diag([Q, 0, 0, 0]) # state cost matrix
+        self.R = np.diag([R]) # control cost matrix
 
         # control limits
         self.max_steering = max_steer
@@ -110,16 +115,17 @@ class MPC:
         """
         Calculate initial MPC state based on vehicle pose
         """
-        init_state = MPCState()
+        
         e = self._cal_lateral_error(curr_pose, ref_pose)
         th = self._normalize_angle(curr_pose.yaw - ref_pose.path_point.theta)
         de = (e - self._prev_e) / self.dt
         dth = (th - self._prev_th) / self.dt
-
-        init_state.e = e
-        init_state.de = de
-        init_state.the = th
-        init_state.dthe = dth
+        init_state = MPCState(e, de, th, dth)
+        
+        #init_state.e = e
+        #init_state.de = de
+        #init_state.the = th
+        #init_state.dthe = dth
 
         self._prev_e = e
         self._prev_th = th
@@ -217,24 +223,24 @@ class MPC:
         
         for i in range(1, self.steps+1):
             vi = mpc_traj[i].v
-            ki = mpc_traj[i].kappa
+            ki = mpc_traj[i].path_point.kappa
             Ad, Bd, Wd, Cd = self.update_state_space_matrix(vi, ki)
-            constraints += [x[:, i] == Ad @ x[:, i-1] + Bd @ u + Wd]
+            constraints += [x[:, [i]] == Ad @ x[:, [i-1]] + Bd @ u[:, [i-1]] + Wd]
 
         # inequality constraints due to input limits
         # umin <= u <= umax
         # dumin*dt <= du <= dumax*dt
         for i in range(self.steps):
-            constraints += [u[:, i] <= self.max_steering], [u[:, i] >= -self.max_steering]
+            constraints += [u[:, i] <= self.max_steering, u[:, i] >= -self.max_steering]
         
         for i in range(self.steps-1):
-            constraints += [u[:, i+1] - u[:, i] <= self.max_steering_rate * self.dt], [u[:, i+1] - u[:, i] >= -self.max_steering_rate * self.dt]
+            constraints += [u[:, i+1] - u[:, i] <= self.max_steering_rate * self.dt, u[:, i+1] - u[:, i] >= -self.max_steering_rate * self.dt]
 
 
         # define cost function
         cost = 0
         for i in range(1, self.steps+1):
-            cost += cp.quad_form(x[:, i], self.Q) + cp.quad_form(u[:, i-1], self.R)
+            cost += cp.quad_form(x[:, [i]], self.Q) + cp.quad_form(u[:, [i-1]], self.R)
 
         # define optimization problem
         prob = cp.Problem(cp.Minimize(cost), constraints)
@@ -242,9 +248,16 @@ class MPC:
         # solve optimization
         prob.solve()
 
-        return u
+        # log optimization status
+        print("====================== QP result: ")
+        print("QP status: ", prob.solver_stats)
+        print("The minimum cost is :", prob.value)
 
-    def calculate_predicted_trajectory(self, init_state: MPCState, u, ref_traj: Trajectory) -> Trajectory:
+        u_opt = u.value     
+
+        return u_opt
+
+    def calculate_predicted_trajectory(self, init_state: MPCState, u:np.array, ref_traj: Trajectory) -> Trajectory:
         """
         Calculate predicted trajectory
         """
@@ -257,10 +270,10 @@ class MPC:
         # iterate over the horizon
         for i in range(self.steps):
             vi = ref_traj[i].v
-            ki = ref_traj[i].kappa
+            ki = ref_traj[i].path_point.kappa
             Ad, Bd, Wd, Cd = self.update_state_space_matrix(vi, ki)
-            state = Ad @ state + Bd @ u[:, i] + Wd
-            mpc_state = MPCState(e=state[0], de=state[1], the=state[2], dthe=state[3])
+            state = Ad @ state + Bd @ u[:, [i]] + Wd
+            mpc_state = MPCState(e=state[0,0], de=state[1,0], the=state[2,0], dthe=state[3,0])
             path_point = self.convert_state_to_pathpoint(mpc_state, ref_traj[i])
 
             predicted_traj.push_back(path_point, vi, self.dt * (i + 1))
@@ -343,7 +356,10 @@ class MPCLateralController():
         self.lookahead_distance_min = 20 #m
         self.lookahead_distance_max = 150 #m
         self.lookahead_time = horizon #s
-        self.velocity_target = 0 #m/s
+        self.velocity_target = None #m/s
+
+        # for debugging
+        self._e_buffer = deque(maxlen=10)
     
     def set_velocity_target(self, target):
         self.velocity_target = target
@@ -376,9 +392,10 @@ class MPCLateralController():
         uopt = self.mpc.run_optimization(init_state, mpc_traj)
 
         # only apply the first step
-        steer = uopt[0, 0]
+        steer = uopt[:, 0][0]
 
         # predicted trajectory for debugging purpose
+        self._e_buffer.append(init_state.e)
 
         return steer
 

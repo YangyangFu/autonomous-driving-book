@@ -404,7 +404,7 @@ class CubicSpiral:
         theta_points = [normalize_rad_angle(theta + self.start.theta) for theta in theta_points]
 
         # output trajectory
-        path = Path(x_points, y_points, theta_points, kappa_points)
+        path = Path(x_points, y_points, theta_points, kappa_points, s_points)
 
         return path
     

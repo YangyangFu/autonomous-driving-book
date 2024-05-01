@@ -41,7 +41,7 @@ class LocalPlanner(object):
     unless a given global plan has already been specified.
     """
 
-    def __init__(self, vehicle, opt_dict={}, map_inst=None, lateral_controller="LQR"):
+    def __init__(self, vehicle, opt_dict={}, map_inst=None, lateral_controller="MPC"):
         """
         :param vehicle: actor to apply to local planner logic onto
         :param opt_dict: dictionary of arguments with different parameters:
@@ -77,7 +77,7 @@ class LocalPlanner(object):
         self._stop_waypoint_creation = False
 
         # Base parameters
-        self._dt = 1.0 / 20.0
+        self._dt = 1.0 / 10
         self._target_speed = 20.0  # Km/h
         self._sampling_radius = 2.0
         
