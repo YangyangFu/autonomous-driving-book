@@ -41,7 +41,7 @@ class LocalPlanner(object):
     unless a given global plan has already been specified.
     """
 
-    def __init__(self, vehicle, opt_dict={}, map_inst=None, lateral_controller="PID"):
+    def __init__(self, vehicle, opt_dict={}, map_inst=None, lateral_controller="LQR"):
         """
         :param vehicle: actor to apply to local planner logic onto
         :param opt_dict: dictionary of arguments with different parameters:

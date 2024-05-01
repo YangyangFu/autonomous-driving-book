@@ -84,7 +84,7 @@ class VehiclePIDController():
         """
 
         acceleration = self._lon_controller.run_step(target_speed)
-        if self._lat_controller.name == 'MPC':
+        if isinstance(self._lat_controller, MPCLateralController):
             self._lat_controller.set_velocity_target(target_speed)
         
         current_steering = self._lat_controller.run_step(waypoints)

@@ -16,3 +16,6 @@ einops
 h5py
 hydra-core==1.1
 lmdb
+
+# optimization
+cvxpy
