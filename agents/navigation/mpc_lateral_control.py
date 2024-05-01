@@ -10,6 +10,7 @@ from agents.navigation.vehicle_model import DynamicBicycleModel
 from agents.navigation.trajectory import Path, PathPoint, Trajectory, TrajectoryPoint
 from agents.navigation.cubic_spiral_generator import CubicSpiral
 from agents.navigation.linear_interpolation import LinearInterpolation
+from agents.navigation.velocity_profile_generator import VelocityGenerator
 
 class Pose:
     x: float 
@@ -24,7 +25,7 @@ class MPCState:
     dthe: float # heading error rate
 
 class MPC:
-    def __init__(self, state_dim, control_dim, output_dim, dt, horizon, model_name, model_params, Q, R):
+    def __init__(self, model_name, model_params, dt, horizon, Q, R):
         """
         Initialize MPC controller
 
@@ -40,19 +41,25 @@ class MPC:
             R (np.array): control cost matrix
             
         """
-        self.state_dim = state_dim
-        self.control_dim = control_dim
-        self.output_dim = output_dim
-        self.dt = dt
-        self.horizon = horizon
+        # model parameters
         self.model_name = model_name
         self.model_params = model_params
-        self.Q = Q
-        self.R = R
+        
+        # dimensions
+        self.model = self._initiate_vehichle_model(model_name, model_params)
+        self.state_dim = self.model.state_dim
+        self.control_dim = self.model.control_dim
+        self.output_dim = self.model.output_dim
+
+        # MPC parameters
+        self.dt = dt
+        self.horizon = horizon
+        self.Q = [Q, 0, 0, 0] # state cost matrix
+        self.R = [R] # control cost matrix
+
+        # control limits
         self.max_steering = 1.0
         self.max_steering_rate = 0.1
-
-        self.model = self._initiate_vehichle_model(model_name, model_params)
 
         # for estimating state
         self._prev_e = 0.0
@@ -67,7 +74,7 @@ class MPC:
         else:
             raise ValueError("Model not supported yet.")
 
-    def run(self, init_state: MPCState, reference_trajectory: Trajectory):
+    def run(self, curr_pose: Pose, reference_trajectory: Trajectory):
         """
         Run MPC controller
         """
@@ -75,24 +82,20 @@ class MPC:
         mpc_traj = self.resample_trajectory_by_time(reference_trajectory)
 
         # calculate initial state: zero or from last step?
-        # self.calculate_initial_state()
+        init_state = self.calculate_initial_state(curr_pose, mpc_traj[0])
 
         # update state for delay compensation
         # self.update_state_for_delay_compensation()
 
-        # update state space matrix
-        Ad, Bd, wd, Cd = self.update_state_space_matrix()
-
         # run optimization to return optimal control inputs
-        u = self.run_optimization()
+        u_opt = self.run_optimization(init_state, mpc_traj)
 
-        # apply input limitsv
-        u = self.apply_input_limits(u)
+        # validity check
 
         # calculate predicted trajectory
-        predicted_trajectory = self.calculate_predicted_trajectory()
+        predicted_trajectory = self.calculate_predicted_trajectory(init_state, u_opt, mpc_traj)
 
-        return u, predicted_trajectory
+        return u_opt, predicted_trajectory
 
     # since the reference trajectory does not take into account the current velocity of the vehicle,
     # we need calculate the trajectory velocity considering the longitudinal dynamics
@@ -100,27 +103,27 @@ class MPC:
         """
         Set reference trajectory from the planner
         """
-        self.reference_trajectory = trajectory 
+        pass 
 
-    def calculate_initial_state(self, curr_pose: Pose, ref_pose: TrajectoryPoint):
+    def calculate_initial_state(self, curr_pose: Pose, ref_pose: TrajectoryPoint) -> MPCState:
         """
         Calculate initial MPC state based on vehicle pose
         """
-        curr_state = np.zeros(self.state_dim)
+        init_state = MPCState()
         e = self._cal_lateral_error(curr_pose, ref_pose)
         th = self._normalize_angle(curr_pose.yaw - ref_pose.path_point.theta)
         de = (e - self._prev_e) / self.dt
         dth = (th - self._prev_th) / self.dt
 
-        curr_state[0] = e
-        curr_state[1] = de
-        curr_state[2] = th
-        curr_state[3] = dth
+        init_state.e = e
+        init_state.de = de
+        init_state.the = th
+        init_state.dthe = dth
 
         self._prev_e = e
         self._prev_th = th
 
-        return curr_state
+        return init_state
 
     def _cal_lateral_error(self, curr_pose: Pose, ref_pose: TrajectoryPoint):
         """
@@ -240,7 +243,7 @@ class MPC:
 
         return u
 
-    def calculate_predicted_trajectory(self, curr_state: MPCState, u, ref_traj: Trajectory) -> Trajectory:
+    def calculate_predicted_trajectory(self, init_state: MPCState, u, ref_traj: Trajectory) -> Trajectory:
         """
         Calculate predicted trajectory
         """
@@ -248,7 +251,7 @@ class MPC:
         
         # initialize
         # (4,1)
-        state = np.array([curr_state.e, curr_state.de, curr_state.the, curr_state.dthe]).reshape(-1, 1)
+        state = np.array([init_state.e, init_state.de, init_state.the, init_state.dthe]).reshape(-1, 1)
 
         # iterate over the horizon
         for i in range(self.horizon):
@@ -276,37 +279,131 @@ class MPC:
         return PathPoint(x, y, theta, kappa, s)
 
         
+"""
+TODO: move motion planner to behavior planner
+"""
+class MotionPlanner:
+    """
+    A simple motion planner for a given goal and velocity target. 
+
+    TODO: Collision checking is not implemented yet.
+
+    """
+    def __init__(self, 
+                 map: carla.Map, 
+                 vehicle: carla.Vehicle, 
+                 goal: carla.Waypoint, 
+                 velocity_target: float, 
+                 num_samples: int = 101,
+                 steer_max: float = 1.0):
+        self._map = map
+        self._vehicle = vehicle
+        self._goal = goal
+        self._velocity_target = velocity_target # m/s
+    
+        # initialize curve generator
+        self.spiral = CubicSpiral()
+        self.num_samples = num_samples 
+        
+        # vehicle constraints
+        self.steer_max = steer_max # rad
+
+    def run(self) -> Trajectory:  
+        """
+        Run motion planner
+        """
+        # current pose of vehicle
+        start_xyz = self._vehicle.get_transform().location
+        start_wp = self._map.get_waypoint(start_xyz, project_to_road=True, lane_type=carla.LaneType.Driving) 
+        v_vect = self._vehicle.get_velocity()
+        v_vect = np.array([v_vect.x, v_vect.y, 0])
+        start_speed = np.linalg.norm(v_vect) # m/s
+        
+        # generate cubic spirals
+        self.spiral.generate_spiral(start_wp, self._goal)
+        path = self.spiral.get_sampled_trajectory(self.num_samples)
+        
+        # generate velocity profile
+        velocity_generator = VelocityGenerator(path, start_speed, self._velocity_target, self.steer_max)
+        traj = velocity_generator.generate_velocity_profile()
+
+        return traj
+
 
 class MPCLateralControl():
-    def __init__(self, vehicle):
+    def __init__(self, vehicle, map, model_name, model_params, dt, horizon, Q=0.5, R=1):
         self._vehicle = vehicle
-        self._cubic_spiral = CubicSpiral()
-        
-        pass 
+        self._map = map
 
-    def run_step(self):
-        pass
+        # MPC instance
+        self.mpc = MPC(model_name, model_params, dt, horizon, Q, R)
+
+        # motion planner parameter
+        self.lookahead_distance_min = 20 #m
+        self.lookahead_distance_max = 150 #m
+        self.lookahead_time = 5 #s
+        self.velocity_target = 10 #m/s
     
+    def set_velocity_target(self, target):
+        self.velocity_target = target
 
-    def _extract_goal(self, route, lookahead_distance_min, lookahead_distance_max, lookahead_time) -> Waypoint:
+    def run_step(self, waypoints):
+        
+        # vehicle pose
+        v = self._vehicle.get_velocity()
+        v = np.array([v.x, v.y])
+        v = np.linalg.norm(v)
+        ego_transform = self._vehicle.get_transform()
+        ego_wp = self._map.get_waypoint(ego_transform.location, 
+                                        project_to_road=True, 
+                                        lane_type=carla.LaneType.Driving)
+        
+        ego_pose = Pose(x=ego_transform.location.x, 
+                        y=ego_transform.location.y, 
+                        yaw = np.radians(ego_transform.rotation.yaw),
+                        v = v)
+        # find goal point from global planner
+        goal_point = self._extract_goal(ego_pose, ego_wp, waypoints)
+
+        # generate trajectory
+        mplaner = MotionPlanner(self._map, self._vehicle, goal_point, self.velocity_target)
+        mpc_traj = mplaner.run()
+
+        # run MPC controller
+        init_state = self.mpc.calculate_initial_state(ego_pose, mpc_traj[0])
+        uopt = self.mpc.run_optimization(init_state, mpc_traj)
+
+        # only apply the first step
+        steer = uopt[0, 0]
+
+        # predicted trajectory for debugging purpose
+
+        return steer
+
+
+    def _extract_goal(self, ego_pose, ego_wp, route) -> carla.Waypoint:
         """
         Extract goal point from given planning route for the motion planner
         
+        This is a temporary implementation as normally the goal point should be given by behavior planner.
+        Here we assume planner gives a route to the target. 
+        The goal point for current step is at max 150 meter away from current position. 
         """
-        pass 
-
-    def generate_mpc_trajectory(self, goal_waypoint) -> Trajectory:
-        """
-        Generate MPC trajectory
+        lookahead_distance = max(self.lookahead_distance_min, min(ego_pose.v * self.lookahead_time, self.lookahead_distance_max))
         
-        """
-        # generate cubic spirals
+        goal_wp_estimate = ego_wp.next(lookahead_distance)[0]
 
-        # generate velocity profile
-
-        # generate trajectory
-        pass 
-
-    def _initiate_vehichle_model(self):
-        pass
+        # find the closest point in the route to the goal_wp
+        min_dist = float('inf')
+        for wp, _ in route:
+            if self._cal_distance(wp, goal_wp_estimate) < min_dist:
+                min_dist = self._cal_distance(wp, goal_wp_estimate)
+                goal_wp = wp
+        
+        return goal_wp
+    
+    def _cal_distance(self, wp1, wp2):
+        return np.sqrt((wp1.transform.location.x - wp2.transform.location.x)**2 + 
+                       (wp1.transform.location.y - wp2.transform.location.y)**2)
+    
 

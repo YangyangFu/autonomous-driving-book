@@ -21,15 +21,15 @@ class CubicSpiral:
     Solver boundary shooting problem with Newton-Raphson method
 
     """
-    def __init__(self):
-        self.simpson_size = 9
+    def __init__(self, simpson_size = 9, tolerance = 1e-5, max_iter = 100):
+        self.simpson_size = simpson_size
         self.p_params = np.zeros(4)
         self.a_params = np.zeros(4)
         self.s_g = -1.0
         
         # newton raphson parameters
-        self.tolerance = 1e-5
-        self.max_iter = 100
+        self.tolerance = tolerance
+        self.max_iter = max_iter
 
     def generate_spiral(self, start: carla.Waypoint, end: carla.Waypoint) -> Tuple[bool, np.array, float]:
         """
