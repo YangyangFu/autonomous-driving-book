@@ -37,3 +37,28 @@ The covered topics are:
 ```
 
 
+## How to Start
+
+1. Run Carla server in docker. Make sure you have docker installed. Direct to the root folder of this repo and run the following command in a terminal:
+
+    For Ubuntu,
+
+    ```bash
+        bash ./run_server/run_carla_0.9.14.sh
+    ```
+
+    For Windows,
+
+    ```shell
+        ./run_server/run_carla_0.9.14.bat
+    ```
+
+2. Open a new terminal to run Carla client:
+
+    For Ubuntu,
+
+    ```bash
+    source setup_pythonpath.sh 
+    cd ./book/3-trajectory-following
+    python test_lateral_control.py
+    ```
