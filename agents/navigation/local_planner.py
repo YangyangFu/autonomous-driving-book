@@ -141,7 +141,41 @@ class LocalPlanner(object):
             self.control_config["lateral_controller"] = {"name": "LQR",
                                                         "args": args_lateral_dict
                                                          }
-        
+        elif self._lateral_controller == "MPC":
+            # retriev vehicle parameters
+            # retrieve vehicle parameters
+            cg = self._vehicle.get_physics_control().center_of_mass # 3D meters
+            mass = self._vehicle.get_physics_control().mass # kg
+            moi = self._vehicle.get_physics_control().moi # NOTE: this seems not the correct moment of inertia kg*m^2
+            
+            # approximate lr and lf
+            lf = l*0.5 - cg.x
+            lr = l*0.5 + cg.x
+
+            # This is just an estimation. The real value should be calibrated by using vehicle data
+            fn = mass * 9.8 # force on wheels when car is stationary
+            wheels = self._vehicle.get_physics_control().wheels
+            cf = (wheels[0].lat_stiff_value + wheels[1].lat_stiff_value) * fn 
+            cr = (wheels[2].lat_stiff_value + wheels[3].lat_stiff_value) * fn
+
+            model_params = {'lf': lf,
+                            'lr': lr,
+                            'mass': mass,
+                            'cf': cf, 
+                            'cr': cr}
+            
+            args_lateral_dict = {'model_name': 'dynamic_bicycle', 
+                                 'model_params': model_params, 
+                                 'max_steer': self._max_steer,
+                                 'max_steer_rate': 0.1, 
+                                 'dt': self._dt,
+                                 'horizon': 5,
+                                 'Q': 0.5,
+                                 'R': 1.0}
+            self.control_config["lateral_controller"] = {"name": "MPC",
+                                                        "args": args_lateral_dict
+                                                         }
+                        
         # Overload parameters
         if opt_dict:
             if 'dt' in opt_dict:

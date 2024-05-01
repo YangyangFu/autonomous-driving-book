@@ -25,7 +25,7 @@ class MPCState:
     dthe: float # heading error rate
 
 class MPC:
-    def __init__(self, model_name, model_params, dt, horizon, Q, R):
+    def __init__(self, model_name, model_params, max_steer, max_steer_rate, dt, horizon, Q, R):
         """
         Initialize MPC controller
 
@@ -33,8 +33,8 @@ class MPC:
             state_dim (int): state dimension
             control_dim (int): control dimension
             output_dim (int): output dimension
-            dt (float): time step
-            horizon (int): prediction horizon
+            dt (float): time step in second
+            horizon (float): prediction horizon in seconds
             model_name (str): vehicle model name
             model_params (dict): vehicle model parameters
             Q (np.array): state cost matrix
@@ -54,12 +54,13 @@ class MPC:
         # MPC parameters
         self.dt = dt
         self.horizon = horizon
+        self.steps = int(horizon / dt)
         self.Q = [Q, 0, 0, 0] # state cost matrix
         self.R = [R] # control cost matrix
 
         # control limits
-        self.max_steering = 1.0
-        self.max_steering_rate = 0.1
+        self.max_steering = max_steer
+        self.max_steering_rate = max_steer_rate
 
         # for estimating state
         self._prev_e = 0.0
@@ -155,7 +156,7 @@ class MPC:
         """
 
         # calculate the output time
-        out_time = self.dt * np.arange(1, self.horizon + 1, 1)
+        out_time = self.dt * np.arange(1, self.steps + 1, 1)
 
         # linear interpolation
         out_traj = self._linear_interp_(in_traj.t, in_traj, out_time)
@@ -203,10 +204,10 @@ class MPC:
         Formulate and run optimization to return optimal control inputs
         """
         # define optimization variables
-        u = cp.Variable((self.control_dim, self.horizon))
+        u = cp.Variable((self.control_dim, self.steps))
 
         # define state variables
-        x = cp.Variable((self.state_dim, self.horizon+1))
+        x = cp.Variable((self.state_dim, self.steps+1))
 
         # define constraints
         # equality constraints
@@ -214,7 +215,7 @@ class MPC:
         x0 = np.array([init_state.e, init_state.de, init_state.the, init_state.dthe])
         constraints += [x[:, 0] == x0]
         
-        for i in range(1, self.horizon+1):
+        for i in range(1, self.steps+1):
             vi = mpc_traj[i].v
             ki = mpc_traj[i].kappa
             Ad, Bd, Wd, Cd = self.update_state_space_matrix(vi, ki)
@@ -223,16 +224,16 @@ class MPC:
         # inequality constraints due to input limits
         # umin <= u <= umax
         # dumin*dt <= du <= dumax*dt
-        for i in range(self.horizon):
+        for i in range(self.steps):
             constraints += [u[:, i] <= self.max_steering], [u[:, i] >= -self.max_steering]
         
-        for i in range(self.horizon-1):
+        for i in range(self.steps-1):
             constraints += [u[:, i+1] - u[:, i] <= self.max_steering_rate * self.dt], [u[:, i+1] - u[:, i] >= -self.max_steering_rate * self.dt]
 
 
         # define cost function
         cost = 0
-        for i in range(1, self.horizon+1):
+        for i in range(1, self.steps+1):
             cost += cp.quad_form(x[:, i], self.Q) + cp.quad_form(u[:, i-1], self.R)
 
         # define optimization problem
@@ -254,7 +255,7 @@ class MPC:
         state = np.array([init_state.e, init_state.de, init_state.the, init_state.dthe]).reshape(-1, 1)
 
         # iterate over the horizon
-        for i in range(self.horizon):
+        for i in range(self.steps):
             vi = ref_traj[i].v
             ki = ref_traj[i].kappa
             Ad, Bd, Wd, Cd = self.update_state_space_matrix(vi, ki)
@@ -330,19 +331,19 @@ class MotionPlanner:
         return traj
 
 
-class MPCLateralControl():
-    def __init__(self, vehicle, map, model_name, model_params, dt, horizon, Q=0.5, R=1):
+class MPCLateralController():
+    def __init__(self, vehicle, model_name, model_params, max_steer=1.0, max_steer_rate = 0.1, dt=0.1, horizon=5, Q=0.5, R=1):
         self._vehicle = vehicle
-        self._map = map
-
+        self._map = self._vehicle.get_world().get_map()
+        
         # MPC instance
-        self.mpc = MPC(model_name, model_params, dt, horizon, Q, R)
+        self.mpc = MPC(model_name, model_params, max_steer, max_steer_rate, dt, horizon, Q, R)
 
         # motion planner parameter
         self.lookahead_distance_min = 20 #m
         self.lookahead_distance_max = 150 #m
-        self.lookahead_time = 5 #s
-        self.velocity_target = 10 #m/s
+        self.lookahead_time = horizon #s
+        self.velocity_target = 0 #m/s
     
     def set_velocity_target(self, target):
         self.velocity_target = target
@@ -362,6 +363,7 @@ class MPCLateralControl():
                         y=ego_transform.location.y, 
                         yaw = np.radians(ego_transform.rotation.yaw),
                         v = v)
+        
         # find goal point from global planner
         goal_point = self._extract_goal(ego_pose, ego_wp, waypoints)
 

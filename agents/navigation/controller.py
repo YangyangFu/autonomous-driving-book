@@ -13,6 +13,7 @@ from agents.navigation.pid_lateral_control import PIDLateralController
 from agents.navigation.pure_pursuit_lateral_control import PurePursuitLateralController
 from agents.navigation.stanley_lateral_control import StanleyLateralController
 from agents.navigation.lqr_lateral_control import LQRLateralController
+from agents.navigation.mpc_lateral_control import MPCLateralController
 
 class VehiclePIDController():
     """
@@ -66,6 +67,8 @@ class VehiclePIDController():
             self._lat_controller = StanleyLateralController(self._vehicle, **config['lateral_controller']['args'])
         elif config['lateral_controller']['name'] == 'LQR':
             self._lat_controller = LQRLateralController(self._vehicle, **config['lateral_controller']['args'])
+        elif config['lateral_controller']['name'] == 'MPC':
+            self._lat_controller = MPCLateralController(self._vehicle, **config['lateral_controller']['args'])
         else:
             raise ValueError("Lateral controller not recognized: {}".format(config['lateral_controller']['name']))
 
@@ -81,6 +84,9 @@ class VehiclePIDController():
         """
 
         acceleration = self._lon_controller.run_step(target_speed)
+        if self._lat_controller.name == 'MPC':
+            self._lat_controller.set_velocity_target(target_speed)
+        
         current_steering = self._lat_controller.run_step(waypoints)
         control = carla.VehicleControl()
         if acceleration >= 0.0:
