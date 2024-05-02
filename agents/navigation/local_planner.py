@@ -81,7 +81,7 @@ class LocalPlanner(object):
         self._target_speed = 20.0  # Km/h
         self._sampling_radius = 2.0
         
-        self._args_longitudinal_dict = {'K_P': 1.0, 'K_I': 0.05, 'K_D': 0, 'dt': self._dt}
+        self._args_longitudinal_dict = {'K_P': 0.08, 'K_I': 0.08, 'K_D': 0.0, 'dt': self._dt}
         self._max_throt = 0.75
         self._max_brake = 0.3
         self._max_steer = np.radians(self._vehicle.get_physics_control().wheels[0].max_steer_angle)
@@ -170,7 +170,7 @@ class LocalPlanner(object):
                                  'max_steer_rate': 0.1, 
                                  'dt': self._dt,
                                  'horizon': 5,
-                                 'Q': 0.5,
+                                 'Q': 0.1,
                                  'R': 1.0}
             self.control_config["lateral_controller"] = {"name": "MPC",
                                                         "args": args_lateral_dict

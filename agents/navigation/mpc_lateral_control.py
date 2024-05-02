@@ -42,8 +42,8 @@ class MPC:
             horizon (float): prediction horizon in seconds
             model_name (str): vehicle model name
             model_params (dict): vehicle model parameters
-            Q (np.array): state cost matrix
-            R (np.array): control cost matrix
+            Q (float): state cost matrix
+            R (float): control cost matrix
             
         """
         # model parameters
@@ -60,7 +60,7 @@ class MPC:
         self.dt = dt
         self.horizon = horizon
         self.steps = int(horizon / dt)
-        self.Q = np.diag([Q, 0, 0, 0]) # state cost matrix
+        self.Q = np.diag([Q, 0, Q, 0]) # state cost matrix
         self.R = np.diag([R]) # control cost matrix
 
         # control limits

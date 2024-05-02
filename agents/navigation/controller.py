@@ -134,6 +134,9 @@ class PIDLongitudinalController():
         self._dt = dt
         self._error_buffer = deque(maxlen=10)
 
+        # for I
+        self._total_error_prev = 0
+
     def run_step(self, target_speed):
         """
         Execute one step of longitudinal control to reach a given target speed.
@@ -156,14 +159,18 @@ class PIDLongitudinalController():
         """
 
         error = target_speed - current_speed
+        total_error = self._total_error_prev + error
+
         self._error_buffer.append(error)
 
         if len(self._error_buffer) >= 2:
             _de = (self._error_buffer[-1] - self._error_buffer[-2]) / self._dt
-            _ie = sum(self._error_buffer) * self._dt
+            _ie = total_error * self._dt
         else:
             _de = 0.0
             _ie = 0.0
+        
+        self._total_error_prev = total_error
 
         return np.clip((self._k_p * error) + (self._k_d * _de) + (self._k_i * _ie), -1.0, 1.0)
 
