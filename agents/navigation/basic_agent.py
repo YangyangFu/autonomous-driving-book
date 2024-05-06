@@ -57,7 +57,7 @@ class BasicAgent(object):
         self._ignore_vehicles = False
         self._use_bbs_detection = False
         self._target_speed = target_speed
-        self._sampling_resolution = 1.0 # meters
+        self._sampling_resolution = 2.0 # meters
         self._base_tlight_threshold = 5.0  # meters
         self._base_vehicle_threshold = 5.0  # meters
         self._speed_ratio = 1

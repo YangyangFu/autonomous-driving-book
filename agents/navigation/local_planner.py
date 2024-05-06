@@ -12,6 +12,7 @@ import numpy as np
 
 import carla
 from agents.navigation.controller import VehiclePIDController
+from agents.navigation.mpc_lateral_control import MPCLateralController, MotionPlanner
 from agents.tools.misc import draw_waypoints, get_speed
 
 
@@ -79,7 +80,7 @@ class LocalPlanner(object):
         # Base parameters
         self._dt = 1.0 / 10
         self._target_speed = 20.0  # Km/h
-        self._sampling_radius = 2.0
+        self._sampling_radius = 1.0
         
         self._args_longitudinal_dict = {'K_P': 0.08, 'K_I': 0.08, 'K_D': 0.0, 'dt': self._dt}
         self._max_throt = 0.75
@@ -167,11 +168,11 @@ class LocalPlanner(object):
             args_lateral_dict = {'model_name': 'dynamic_bicycle', 
                                  'model_params': model_params, 
                                  'max_steer': self._max_steer,
-                                 'max_steer_rate': 0.1, 
+                                 'max_steer_rate': 0.05, 
                                  'dt': self._dt,
                                  'horizon': 5,
-                                 'Q': 0.1,
-                                 'R': 1.0}
+                                 'Q': 1.0,
+                                 'R': 0.}
             self.control_config["lateral_controller"] = {"name": "MPC",
                                                         "args": args_lateral_dict
                                                          }
@@ -312,7 +313,7 @@ class LocalPlanner(object):
         :return: control to be applied
         """
         if self._follow_speed_limits:
-            self._target_speed = self._vehicle.get_speed_limit()
+            self._target_speed = self._vehicle.get_speed_limit() #km/h
 
         # Add more waypoints too few in the horizon
         if not self._stop_waypoint_creation and len(self._waypoints_queue) < self._min_waypoint_queue_length:
@@ -320,7 +321,7 @@ class LocalPlanner(object):
 
         # Purge the queue of obsolete waypoints
         veh_location = self._vehicle.get_location()
-        vehicle_speed = get_speed(self._vehicle) / 3.6
+        vehicle_speed = get_speed(self._vehicle) / 3.6 # m/s
         self._min_distance = self._base_min_distance + self._distance_ratio * vehicle_speed
 
         num_waypoint_removed = 0
@@ -350,8 +351,14 @@ class LocalPlanner(object):
             control.manual_gear_shift = False
         else:
             self.target_waypoint, self.target_road_option = self._waypoints_queue[0]
+            route = self._waypoints_queue
+            target_speed = self._target_speed # km/h
             #control = self._vehicle_controller.run_step(self._target_speed, self.target_waypoint)
-            control = self._vehicle_controller.run_step(self._target_speed, self._waypoints_queue)
+            if self._lateral_controller == "MPC":
+                ref_traj = self._vehicle_controller._lat_controller._motion_planner.run(self._target_speed/3.6, route)
+                route = ref_traj
+                target_speed = ref_traj[1].v * 3.6
+            control = self._vehicle_controller.run_step(target_speed, route)
 
         if debug:
             draw_waypoints(self._vehicle.get_world(), [self.target_waypoint], 1.0)

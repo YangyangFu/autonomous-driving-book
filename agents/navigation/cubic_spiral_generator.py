@@ -90,15 +90,6 @@ class CubicSpiral:
             jacobian = self.update_jacobian(p, s_g)
             jacobian = jacobian[:, [1,2,4]]
             
-            if iter % 10 == 0:
-                print("==================================: ", iter)
-                print("p: ", p)
-                print("s_g: ", s_g)
-                print("state_g: ", state_g)
-                print("state_g_hat: ", state_g_hat)
-                print("error: ", error)
-                print("jacobian: ", jacobian)
-
             # update delta_p
             
             #delta_p = np.linalg.inv(jacobian) @ error
@@ -115,9 +106,9 @@ class CubicSpiral:
         # log convergence
         success = np.linalg.norm(error) <= self.tolerance
         if success:
-            print("Newton-Raphson method converged in {} iterations".format(iter))
+            print("Newton-Raphson method converged in {} iterations: Sg: {:.2f}".format(iter, s_g))
         else:
-            print("Newton-Raphson method did not converge")
+            print("Newton-Raphson method did not converge: Sg: {:.2f}".format(s_g))
         
         # save results
         self.p_params = p
@@ -364,7 +355,7 @@ class CubicSpiral:
         """
         Estimate waypoint curvature based on HD map
         """
-        pre_waypoint = waypoint.next(distance)[-1] # this is a hard-coded value.
+        pre_waypoint = waypoint.previous(distance)[-1] # this is a hard-coded value.
 
         yaw = np.radians(waypoint.transform.rotation.yaw)
         pre_yaw = np.radians(pre_waypoint.transform.rotation.yaw)
@@ -387,21 +378,27 @@ class CubicSpiral:
 
         s_points = [i * ds for i in range(num_samples)]
         kappa_points = [self.kappa(self.a_params, s) for s in s_points]
-        theta_points = [self.theta(self.a_params, s) for s in s_points]
+        theta_points = [normalize_rad_angle(self.theta(self.a_params, s) + self.start.theta) for s in s_points]
 
-        # here we use trapezoidal integration instead of simpson integration to save computation time
+        # iterative trapezoidal integration
         x_points = [0.0] * num_samples
         y_points = [0.0] * num_samples
+        x_points[0] = self.start.x 
+        y_points[0] = self.start.y
+
+
+        dx = 0
+        dy = 0
 
         for i in range(1, num_samples):
-            x_points[i] = x_points[i-1] + ds * (np.cos(theta_points[i]) + np.cos(theta_points[i-1])) / 2
-            y_points[i] = y_points[i-1] + ds * (np.sin(theta_points[i]) + np.sin(theta_points[i-1])) / 2
-
-
-        # to global frame
-        x_points = [x + self.start.x for x in x_points]
-        y_points = [y + self.start.y for y in y_points]
-        theta_points = [normalize_rad_angle(theta + self.start.theta) for theta in theta_points]
+            dx = (dx / i) * (i-1) + (np.cos(theta_points[i]) + np.cos(theta_points[i-1])) / (2*i)
+            dy = (dy / i) * (i-1) + (np.sin(theta_points[i]) + np.sin(theta_points[i-1])) / (2*i)
+            x_points[i] = s_points[i] * dx + x_points[0]
+            y_points[i] = s_points[i] * dy + y_points[0]
+            
+            # the following is not correct
+            #x_points[i] = x_points[i-1] + ds * (np.cos(theta_points[i]) + np.cos(theta_points[i-1])) / 2
+            #y_points[i] = y_points[i-1] + ds * (np.sin(theta_points[i]) + np.sin(theta_points[i-1])) / 2
 
         # output trajectory
         path = Path(x_points, y_points, theta_points, kappa_points, s_points)

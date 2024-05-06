@@ -6,7 +6,7 @@ from agents.navigation.trajectory import PathPoint, Path, Trajectory, Trajectory
 
 class VelocityGenerator():
 
-    def __init__(self, spiral: Path, current_speed: float, target_speed: float, a_max: float):
+    def __init__(self, spiral: Path, current_speed: float, target_speed: float, max_throttle: float, max_brake: float):
         """
         Initialize the velocity generator
 
@@ -14,24 +14,26 @@ class VelocityGenerator():
             spiral (Path): the path to follow
             current_speed (float): the current speed of the vehicle
             target_speed (float): the target speed of the vehicle
-            a_max (float): the maximum acceleration of the vehicle
+            max_throttle (float): the maximum acceleration of the vehicle, positive
+            max_brake (float): the maximum deceleration of the vehicle, positive
         """
 
         self._path = spiral
         self._target_speed = target_speed
         self._current_speed = current_speed
-        self._a_max = a_max
+        self._max_throttle = max_throttle
+        self._max_brake = max_brake
 
-        self._small_number = 1e-8
+        self._small_number = 1e-12
 
     def generate_velocity_profile(self):
         """
         Generate a linear velocity profile
         """
         if self._current_speed <= self._target_speed:
-            ramp_distance =  self._cal_distance(self._current_speed, self._target_speed, self._a_max)
+            ramp_distance =  self._cal_distance(self._current_speed, self._target_speed, self._max_throttle)
         else:
-            ramp_distance = self._cal_distance(self._current_speed, self._target_speed, -self._a_max)
+            ramp_distance = self._cal_distance(self._current_speed, self._target_speed, -self._max_brake)
 
         # find the index of point where the ramp ends
         ramp_end_index = 0
@@ -45,16 +47,16 @@ class VelocityGenerator():
         
         final_ramp_distance = self._path[ramp_end_index].s - self._path[0].s
         ramp_a = (self._target_speed**2 - self._current_speed**2) / (2 * final_ramp_distance + self._small_number)
-        if ramp_a > self._a_max:
-            ramp_a = self._a_max
-        elif ramp_a < -self._a_max:
-            ramp_a = -self._a_max
+        if ramp_a > self._max_throttle:
+            ramp_a = self._max_throttle
+        elif ramp_a < -self._max_brake:
+            ramp_a = -self._max_brake
 
-
-        for i in range(ramp_end_index+1):
+        traj.push_back(self._path[0], self._current_speed, 0)
+        for i in range(1, ramp_end_index+1):
             point = self._path[i]
-            vi = self._cal_speed(self._current_speed, ramp_a, point.s - self._path[0].s)
-            ti = (vi - self._current_speed) / (ramp_a + self._small_number)
+            vi = self._cal_speed(traj[i-1].v, ramp_a, point.s - self._path[i-1].s)
+            ti = traj[i-1].t + (vi - traj[i-1].v) / (ramp_a + self._small_number)
             
             traj.push_back(point, vi, ti)
 
@@ -62,7 +64,7 @@ class VelocityGenerator():
         for i in range(ramp_end_index+1, len(self._path)):
             point = self._path[i]
             vi = self._target_speed
-            ti = (self._path[i].s - self._path[i-1].s) / (self._target_speed + self._small_number)
+            ti = traj[i-1].t + (self._path[i].s - self._path[i-1].s) / (self._target_speed + self._small_number)
             traj.push_back(point, vi, ti)
 
         return traj
@@ -112,7 +114,7 @@ def test_velocity_generator():
 
     # straight line path with reachable target speed
     path = Path([0, 1, 2, 3, 4], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 1, 2, 3, 4])
-    generator = VelocityGenerator(path, 0, 4, 2)
+    generator = VelocityGenerator(path, 0, 4, 2, 2)
     traj = generator.generate_velocity_profile()
     for i, point in enumerate(traj):
         print(f"Point {i}: s={point.path_point.s}, v={point.v}, t={point.t}")
@@ -126,7 +128,7 @@ def test_velocity_generator():
 
     # straight line path with unreachable target speed
     path = Path([0, 1, 2, 3, 4], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 1, 2, 3, 4])
-    generator = VelocityGenerator(path, 0, 4, 1)
+    generator = VelocityGenerator(path, 0, 4, 1, 1)
     traj = generator.generate_velocity_profile()
     for i, point in enumerate(traj):
         print(f"Point {i}: s={point.path_point.s}, v={point.v}, t={point.t}")

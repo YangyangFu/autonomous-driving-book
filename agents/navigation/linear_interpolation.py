@@ -14,7 +14,7 @@ class LinearInterpolation:
 
         # calculate linear interpolation
 
-        f = interp1d(key, value, kind='linear')
+        f = interp1d(key, value, kind='linear', fill_value='extrapolate', assume_sorted=True)
         value_query = f(query)
         
         return value_query

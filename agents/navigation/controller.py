@@ -78,15 +78,14 @@ class VehiclePIDController():
         PID controllers to reach a target waypoint
         at a given target_speed.
 
-            :param target_speed: desired vehicle speed
+            :param target_speed: desired vehicle speed in Km/h
             :param waypoint: target location encoded as a waypoint
             :return: distance (in meters) to the waypoint
         """
-
+        # longitudinal
         acceleration = self._lon_controller.run_step(target_speed)
-        if isinstance(self._lat_controller, MPCLateralController):
-            self._lat_controller.set_velocity_target(target_speed)
-        
+        print("Total error for i: ", self._lon_controller._total_error_prev)
+        # lateral control        
         current_steering = self._lat_controller.run_step(waypoints)
         control = carla.VehicleControl()
         if acceleration >= 0.0:

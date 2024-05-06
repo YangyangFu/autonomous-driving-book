@@ -820,7 +820,8 @@ def game_loop(args):
         if args.sync:
             settings = sim_world.get_settings()
             settings.synchronous_mode = True
-            settings.fixed_delta_seconds = 0.05
+            # this decides the time step in server? but why my server fps is around 40 during simulation?
+            settings.fixed_delta_seconds = 0.05 
             sim_world.apply_settings(settings)
 
             traffic_manager.set_synchronous_mode(True)
@@ -917,6 +918,28 @@ def game_loop(args):
                 #carla.DebugHelper.draw_line(traj_surface, TRAJ_COLOR, points[i], points[i+1], 5)
                 #world.world.debug.draw_line(locations[i], locations[i+1], color = carla.Color(255, 0, 0), life_time=0.1)
                 world.world.debug.draw_point(locations[i], size=0.05, color = carla.Color(255, 0, 0), life_time=0.1)
+
+
+            # plot motion planner trajectory
+            if agent._local_planner._lateral_controller == "MPC":
+                print("MPC trajectory plotting")
+                lat_mpc = agent._local_planner._vehicle_controller._lat_controller
+                mpc_traj_ref = lat_mpc._ref_traj
+                mpc_traj_pred = lat_mpc._pred_traj
+                mpc_traj_raw = lat_mpc._raw_traj
+                if len(mpc_traj_ref) > 0:
+                    print("goal in planner: ", lat_mpc._motion_planner._goal.transform)
+                    print("goal in spiral: ", mpc_traj_raw.x[-1], mpc_traj_raw.y[-1], mpc_traj_raw.theta[-1], mpc_traj_raw.kappa[-1])
+                for idx in range(len(mpc_traj_raw)):
+                    li_raw = carla.Location(x=mpc_traj_raw[idx].path_point.x, y=mpc_traj_raw[idx].path_point.y, z=0)
+                    world.world.debug.draw_point(li_raw, size=0.1, color=carla.Color(255, 255, 0), life_time=0.1)
+
+                #for idx in range(len(mpc_traj_ref)):
+                #    li_ref = carla.Location(x=mpc_traj_ref[idx].path_point.x, y=mpc_traj_ref[idx].path_point.y, z=0.0)
+                #    li_pred = carla.Location(x=mpc_traj_pred[idx].path_point.x, y = mpc_traj_pred[idx].path_point.y, z=0)
+                #    world.world.debug.draw_point(li_ref, size=0.1, color=carla.Color(0, 255, 0), life_time = 0.1)
+                    #world.world.debug.draw_point(li_pred, size=0.1, color=carla.Color(0, 0, 255), life_time=1)
+
             display.blit(traj_surface, (0, 0))
             
             pygame.display.flip()
