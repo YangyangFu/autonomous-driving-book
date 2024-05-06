@@ -1,6 +1,6 @@
 from typing import Tuple, List
 import numpy as np
-from scipy.integrate import simpson
+from scipy.integrate import simpson, trapezoid
 from scipy import linalg 
 import carla
 
@@ -404,6 +404,28 @@ class CubicSpiral:
         path = Path(x_points, y_points, theta_points, kappa_points, s_points)
 
         return path
-    
+
+    # TODO: this is not right
+    def get_sampled_trajectory1(self, num_samples):
+
+        ds = self.s_g / (num_samples - 1)
+        s_points = [i * ds for i in range(num_samples)]
+        kappa_points = [self.kappa(self.a_params, s) for s in s_points]
+        theta_points = [normalize_rad_angle(self.theta(self.a_params, s)) for s in s_points]
+
+        x_points = [0] * num_samples
+        y_points = [0] * num_samples
+        for i in range(1, num_samples):
+            x_points[i] = trapezoid(np.cos(theta_points[:i+1]), x = s_points[:i+1])
+            y_points[i] = trapezoid(np.sin(theta_points[:i+1]), x = s_points[:i+1]) 
+
+
+        x_points = [x + self.start.x for x in x_points]
+        y_points = [y + self.start.y for y in y_points]
+        theta_points = [normalize_rad_angle(th + self.start.theta) for th in theta_points]
+
+        path = Path(x_points, y_points, theta_points, kappa_points, s_points)
+
+        return path
 
     
