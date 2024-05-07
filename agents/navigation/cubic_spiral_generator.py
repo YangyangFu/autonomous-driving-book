@@ -21,7 +21,7 @@ class CubicSpiral:
     Solver boundary shooting problem with Newton-Raphson method
 
     """
-    def __init__(self, simpson_size = 9, tolerance = 1e-5, max_iter = 100):
+    def __init__(self, simpson_size = 9, tolerance = 1e-2, max_iter = 100):
         self.simpson_size = simpson_size
         self.p_params = np.zeros(4)
         self.a_params = np.zeros(4)
@@ -77,15 +77,17 @@ class CubicSpiral:
 
         # Newton-Raphson method
         error = 1e6 * np.ones((3,1))
+        diff = np.abs(error).sum()
 
         iter = 0
         
-        while iter < self.max_iter and np.linalg.norm(error) > self.tolerance:
+        while iter < self.max_iter and diff > self.tolerance:
 
             # update error
             state_g_hat = self.update_goal_state(p, s_g)
             error = state_g - state_g_hat
-            
+            diff = np.abs(error).sum()
+
             # compute jacobian
             jacobian = self.update_jacobian(p, s_g)
             jacobian = jacobian[:, [1,2,4]]

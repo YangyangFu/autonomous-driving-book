@@ -910,14 +910,15 @@ def game_loop(args):
             traj_surface = pygame.Surface((args.width, args.height))
             traj_surface.set_colorkey((0, 0, 0))
             locations = []
-            for i in range(min(20, len(traj))):
+            
+            for i in range(min(50, len(traj))):
                 transform = traj[i][0].transform
                 locations.append(transform.location)
 
-            for i in range(len(locations)-1):
+            #for i in range(len(locations)-1):
                 #carla.DebugHelper.draw_line(traj_surface, TRAJ_COLOR, points[i], points[i+1], 5)
                 #world.world.debug.draw_line(locations[i], locations[i+1], color = carla.Color(255, 0, 0), life_time=0.1)
-                world.world.debug.draw_point(locations[i], size=0.05, color = carla.Color(255, 0, 0), life_time=0.1)
+                #world.world.debug.draw_point(locations[i], size=0.1, color = carla.Color(255, 0, 0), life_time=0.1)
 
 
             # plot motion planner trajectory
@@ -930,15 +931,18 @@ def game_loop(args):
                 if len(mpc_traj_ref) > 0:
                     print("goal in planner: ", lat_mpc._motion_planner._goal.transform)
                     print("goal in spiral: ", mpc_traj_raw.x[-1], mpc_traj_raw.y[-1], mpc_traj_raw.theta[-1], mpc_traj_raw.kappa[-1])
-                #for idx in range(len(mpc_traj_raw)):
-                #    li_raw = carla.Location(x=mpc_traj_raw[idx].path_point.x, y=mpc_traj_raw[idx].path_point.y, z=0)
-                #    world.world.debug.draw_point(li_raw, size=0.1, color=carla.Color(255, 255, 0), life_time=0.1)
-
+                for idx in range(len(mpc_traj_raw)):
+                    li_raw = carla.Location(x=mpc_traj_raw[idx].path_point.x, y=mpc_traj_raw[idx].path_point.y, z=0)
+                    world.world.debug.draw_point(li_raw, size=0.1, color=carla.Color(255, 255, 0), life_time=0.1)
+                # only plot goal point
+                #    li_raw = carla.Location(x=mpc_traj_raw[-1].path_point.x, y=mpc_traj_raw[-1].path_point.y, z=0)
+                #    world.world.debug.draw_point(li_raw, size=0.1, color=carla.Color(255, 255, 0), life_time=-1)
+                
                 for idx in range(len(mpc_traj_ref)):
                     li_ref = carla.Location(x=mpc_traj_ref[idx].path_point.x, y=mpc_traj_ref[idx].path_point.y, z=0.0)
-                    li_pred = carla.Location(x=mpc_traj_pred[idx].path_point.x, y = mpc_traj_pred[idx].path_point.y, z=0)
+                    #li_pred = carla.Location(x=mpc_traj_pred[idx].path_point.x, y = mpc_traj_pred[idx].path_point.y, z=0)
                     world.world.debug.draw_point(li_ref, size=0.1, color=carla.Color(0, 255, 0), life_time = 0.1)
-                    world.world.debug.draw_point(li_pred, size=0.1, color=carla.Color(0, 0, 255), life_time=0.1)
+                    #world.world.debug.draw_point(li_pred, size=0.1, color=carla.Color(0, 0, 255), life_time=0.1)
 
             display.blit(traj_surface, (0, 0))
             
@@ -972,7 +976,7 @@ def game_loop(args):
             ax1.autoscale_view()
             
             vm.append(get_speed(world.player))
-            vs.append(agent.get_local_planner()._target_speed)
+            vs.append(agent._local_planner._vehicle_controller._target_speed)
             throttle.append(control.throttle - control.brake)
             steer.append(world.player.get_control().steer)
             steer_error.append(agent._local_planner._vehicle_controller._lat_controller._e_buffer[-1])
@@ -1047,7 +1051,7 @@ def main():
     argparser.add_argument(
         '--res',
         metavar='WIDTHxHEIGHT',
-        default='1280x720',
+        default='2560x1440',
         help='Window resolution (default: 1280x720)')
     argparser.add_argument(
         '--sync',

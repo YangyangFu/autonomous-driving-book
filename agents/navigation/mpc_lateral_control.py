@@ -60,7 +60,7 @@ class MPC:
         self.dt = dt
         self.horizon = horizon
         self.steps = int(horizon / dt)
-        self.Q = np.diag([Q, 0, 0, 0]) # state cost matrix
+        self.Q = np.diag([Q, 0, Q, 0]) # state cost matrix
         self.R = np.diag([R]) # control cost matrix
         self._ref_traj = [] # mpc refernce trajectory by time
         # control limits
@@ -333,7 +333,7 @@ class MotionPlanner:
         self.lookahead_time = lookahead_time #s
 
         # initialize curve generator
-        self.spiral = CubicSpiral(simpson_size=21)
+        self.spiral = CubicSpiral()
         self.num_samples = num_samples 
         
         # vehicle constraints
@@ -342,6 +342,7 @@ class MotionPlanner:
 
         # save for debugging
         self._goal = None
+        self._prev_path = Trajectory()
 
     def run(self, velocity_target: float, route) -> Trajectory:  
         """
@@ -370,10 +371,14 @@ class MotionPlanner:
         goal_wp = self._extract_goal(ego_pose, ego_wp, velocity_target, route)
         self._goal = goal_wp
 
-        # generate cubic spirals
-        self.spiral.generate_spiral(ego_wp, goal_wp)
-        path = self.spiral.get_sampled_trajectory(self.num_samples)
-        
+        # generate cubic spirals;
+        # TODO: need a robust solution when cubic spiral cannot be generated. Currently simply use previous spiral
+        status = self.spiral.generate_spiral(ego_wp, goal_wp)
+        if status:
+            path = self.spiral.get_sampled_trajectory(self.num_samples)
+            self._prev_path = path
+        else:
+            path = self._prev_path    
         # generate velocity profile: m/s
         velocity_generator = VelocityGenerator(path, v, velocity_target, self._max_acce, self._max_dece)
         traj = velocity_generator.generate_velocity_profile()
@@ -438,7 +443,7 @@ class MPCLateralController():
 
         self._motion_planner = MotionPlanner(self._map, 
                                              self._vehicle, 
-                                             num_samples=101, 
+                                             num_samples=51, 
                                              max_acce=max_acce,
                                              max_dece=max_dece,
                                              lookahead_time=self.lookahead_time)

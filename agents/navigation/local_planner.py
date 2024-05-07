@@ -82,7 +82,8 @@ class LocalPlanner(object):
         self._target_speed = 20.0  # Km/h
         self._sampling_radius = 1.0
         
-        self._args_longitudinal_dict = {'K_P': 0.08, 'K_I': 0.08, 'K_D': 0.0, 'dt': self._dt}
+        # with LQR: 0.08, 0.01, 0
+        self._args_longitudinal_dict = {'K_P': 0.05, 'K_I': 0.02, 'K_D': 0.0, 'dt': self._dt}
         self._max_throt = 0.75
         self._max_brake = 0.3
         self._max_steer = np.radians(self._vehicle.get_physics_control().wheels[0].max_steer_angle)
@@ -168,11 +169,11 @@ class LocalPlanner(object):
             args_lateral_dict = {'model_name': 'dynamic_bicycle', 
                                  'model_params': model_params, 
                                  'max_steer': self._max_steer,
-                                 'max_steer_rate': 0.05, 
+                                 'max_steer_rate': 0.1, 
                                  'dt': self._dt,
                                  'horizon': 5,
                                  'Q': 1.0,
-                                 'R': 0.}
+                                 'R': 100.0}
             self.control_config["lateral_controller"] = {"name": "MPC",
                                                         "args": args_lateral_dict
                                                          }
@@ -357,7 +358,7 @@ class LocalPlanner(object):
             if self._lateral_controller == "MPC":
                 ref_traj = self._vehicle_controller._lat_controller._motion_planner.run(self._target_speed/3.6, route)
                 route = ref_traj
-                target_speed = ref_traj[1].v * 3.6
+                #target_speed = ref_traj[1].v * 3.6
             control = self._vehicle_controller.run_step(target_speed, route)
 
         if debug:

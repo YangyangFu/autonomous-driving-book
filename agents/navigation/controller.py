@@ -51,6 +51,11 @@ class VehiclePIDController():
         self._vehicle = vehicle
         self._world = self._vehicle.get_world()
         self.past_steering = self._vehicle.get_control().steer
+        self.past_throttle = self._vehicle.get_control().throttle
+        self.past_brake = self._vehicle.get_control().brake
+
+        # FOR DEBUGGING
+        self._target_speed = 0
 
         # longitudinal controller
         if config['longitudinal_controller']['name'] == 'PID':
@@ -83,21 +88,45 @@ class VehiclePIDController():
             :return: distance (in meters) to the waypoint
         """
         # longitudinal
+        # for debugging
+        self._target_speed = target_speed
+
+        # reset I after stop
+        if self._vehicle.is_at_traffic_light() and get_speed(self._vehicle) < 0.1:
+            self._lon_controller._total_error_prev = 0
+
         acceleration = self._lon_controller.run_step(target_speed)
         print("Total error for i: ", self._lon_controller._total_error_prev)
         # lateral control        
         current_steering = self._lat_controller.run_step(waypoints)
+        
+        # cannot acc/dec too fast
         control = carla.VehicleControl()
         if acceleration >= 0.0:
-            control.throttle = min(acceleration, self.max_throt)
-            control.brake = 0.0
+            curr_throttle = min(acceleration, self.max_throt)
+            curr_brake = 0.0
         else:
-            control.throttle = 0.0
-            control.brake = min(abs(acceleration), self.max_brake)
+            curr_throttle = 0.0
+            curr_brake = min(abs(acceleration), self.max_brake)
 
+        if curr_throttle > self.past_throttle + 0.1:
+            curr_throttle = self.past_throttle + 0.1
+        elif curr_throttle < self.past_throttle - 0.1:
+            curr_throttle = max(0, self.past_throttle - 0.1)
+        
+        if curr_brake > self.past_brake + 0.1:
+            curr_brake = self.past_brake + 0.1
+        elif curr_brake < self.past_brake - 0.1:
+            curr_brake = max(0, self.past_brake - 0.1)
+
+        control.throttle = curr_throttle
+        control.brake = curr_brake
         control.steer = current_steering
         control.hand_brake = False
         control.manual_gear_shift = False
+
+        self.past_throttle = curr_throttle #self._vehicle.get_control().throttle #curr_throttle
+        self.past_brake = curr_brake #self._vehicle.get_control().brake #curr_brake
 
         return control
 
