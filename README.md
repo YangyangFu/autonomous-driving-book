@@ -1,5 +1,7 @@
 # Autonoumous Driving: Beginner to Master
 
+*Help are always welcomed !*
+
 This book aims to help beginners to learn autonomous driving from coding excercises. 
 The content is organized in a bottom-up approach, by introducing local longitudinal and lateral PID controller first, and all the way up to perception.
 All topics are demosntrated through closed-loop simulation using CARLA.
