@@ -100,7 +100,7 @@ class StanleyLateralController():
         # cross-track error 
         cross = np.cross(e, g_vec)
 
-        # if on the left side of a path, de is negative
+        # de is negative if on the right side of the path
         de = cross[2]
         
         return de
