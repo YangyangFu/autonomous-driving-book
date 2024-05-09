@@ -114,7 +114,7 @@ class StanleyLateralController():
         vel = self._vehicle.get_velocity()
         speed = np.sqrt(vel.x ** 2 + vel.y ** 2 + vel.z ** 2) # m/s
 
-        # NOTE: CARLA uses left-handed coordinate system. The error needs to be negated acoording to method 1.
+        # steering angle
         steering = -heading_error - np.arctan2(self.k * cross_track_error, self.ks + speed)
 
         steering = self.normalize_angle(steering)
