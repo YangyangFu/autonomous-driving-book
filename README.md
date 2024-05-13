@@ -55,7 +55,15 @@ The covered topics are:
         ./run_server/run_carla_0.9.14.bat
     ```
 
-2. Open a new terminal to run Carla client:
+2. Run visualization. Open a new terminal and type:
+
+    ```bash
+    bash run_visualization/run_carla_viz.sh
+    ```
+
+    Then open a browser and go to `localhost:8000`.
+
+4. Open a new terminal to run Carla client:
 
     For Ubuntu,
 
