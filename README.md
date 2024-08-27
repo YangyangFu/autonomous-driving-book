@@ -73,6 +73,11 @@ The covered topics are:
     python test_lateral_control.py
     ```
 
+## Ongoing:
+- Motion Planning Module is being developed [here](https://github.com/YangyangFu/motion-planning-cpp).
+- End-to-end tracking and planning is being developed [here](https://github.com/YangyangFu/fsd-agents).
+
+All the above modules will be moved into this repo in the end. 
 
 ## Contribution
 
